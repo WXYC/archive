@@ -1,103 +1,153 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useEffect } from "react";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { formatDate, getArchiveUrl, getHourLabel } from "@/lib/utils";
+import AudioPlayer from "@/components/audio-player";
+import { Label } from "@/components/ui/label";
+
+export default function ArchivePage() {
+  // Get date range (today to 2 weeks ago)
+  const today = new Date();
+  const twoWeeksAgo = new Date();
+  twoWeeksAgo.setDate(today.getDate() - 14);
+
+  // State
+  const [selectedDate, setSelectedDate] = useState<Date>(today);
+  const [selectedHour, setSelectedHour] = useState<string>("12");
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [archiveSelected, setArchiveSelected] = useState(false);
+  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+
+  // Update audio URL when date or hour changes
+  useEffect(() => {
+    async function updateAudioUrl() {
+      if (selectedDate && selectedHour && archiveSelected) {
+        setIsLoadingUrl(true);
+        try {
+          const url = await getArchiveUrl(
+            selectedDate,
+            Number.parseInt(selectedHour)
+          );
+          setAudioUrl(url);
+        } catch (error) {
+          console.error("Error getting audio URL:", error);
+          setAudioUrl(null);
+        } finally {
+          setIsLoadingUrl(false);
+        }
+      }
+    }
+
+    updateAudioUrl();
+  }, [selectedDate, selectedHour, archiveSelected]);
+
+  const handlePlay = () => {
+    setArchiveSelected(true);
+    setIsPlaying(true);
+  };
+
+  // Update handler for hour changes to include date
+  const handleHourChange = (newHour: number, newDate: Date) => {
+    // Check if the new date is within the allowed range
+    if (newDate > today || newDate < twoWeeksAgo) {
+      return; // Don't update if outside the allowed range
+    }
+
+    setSelectedDate(newDate);
+    setSelectedHour(newHour.toString());
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="container mx-auto px-4 py-8 pb-32 max-w-4xl min-h-screen">
+      <Card className="border-none shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-t-lg">
+          <CardTitle className="text-2xl md:text-3xl font-bold">
+            WXYC Archive Player
+          </CardTitle>
+          <CardDescription className="text-purple-100">
+            Listen to WXYC programming from the past two weeks
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex-1">
+              <Label className="text-sm font-medium mb-2 block">
+                Select Date
+              </Label>
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => date && setSelectedDate(date)}
+                disabled={(date) => date > today || date < twoWeeksAgo}
+                className="rounded-md border"
+              />
+            </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            <div className="flex-1">
+              <Label className="text-sm font-medium mb-2 block">
+                Select Hour
+              </Label>
+              <Select value={selectedHour} onValueChange={setSelectedHour}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select hour" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <SelectItem key={i} value={i.toString()}>
+                      {getHourLabel(i)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="mt-6 p-4 bg-purple-50 rounded-lg">
+                <h3 className="font-medium text-purple-900">
+                  Selected Archive
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  {formatDate(selectedDate)} at{" "}
+                  {getHourLabel(Number.parseInt(selectedHour))}
+                </p>
+                <Button
+                  className="w-full mt-4 bg-purple-600 hover:bg-purple-700"
+                  onClick={handlePlay}
+                  disabled={isLoadingUrl}
+                >
+                  {isLoadingUrl ? "Loading..." : "Listen Now"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Fixed audio player at bottom */}
+      <AudioPlayer
+        audioUrl={audioUrl}
+        isPlaying={isPlaying}
+        setIsPlaying={setIsPlaying}
+        selectedDate={selectedDate}
+        selectedHour={Number.parseInt(selectedHour)}
+        archiveSelected={archiveSelected}
+        onHourChange={handleHourChange}
+      />
     </div>
   );
 }
