@@ -22,15 +22,27 @@ import { formatDate, getArchiveUrl, getHourLabel } from "@/lib/utils";
 import AudioPlayer from "@/components/audio-player";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LoginDialog } from "@/components/login-dialog";
+import {
+  defaultConfig,
+  getDateRange,
+  archiveConfigs,
+  ArchiveConfig,
+} from "@/config/archive";
+import { useAuth } from "@/lib/auth";
 
 export default function ArchivePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { isAuthenticated } = useAuth();
 
-  // Get date range (today to 2 weeks ago)
-  const today = new Date();
-  const twoWeeksAgo = new Date();
-  twoWeeksAgo.setDate(today.getDate() - 14);
+  // Use admin config if authenticated, otherwise use default
+  const selectedConfig = isAuthenticated ? archiveConfigs.admin : defaultConfig;
+  const adminConfig = archiveConfigs.admin;
+
+  // Get date range from selected config
+  const { today, startDate: allowedStart } = getDateRange(selectedConfig);
+  const { startDate: adminStart } = getDateRange(adminConfig);
 
   // Set default to yesterday at noon
   const yesterday = new Date(today);
@@ -52,6 +64,7 @@ export default function ArchivePage() {
       const date = new Date(year, month, day);
       if (isNaN(date.getTime())) return null;
 
+      // Only return the date and hour; don't set state here
       return {
         date,
         hour: hour.toString(),
@@ -85,9 +98,48 @@ export default function ArchivePage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [archiveSelected, setArchiveSelected] = useState(false);
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+  const [invalidLinkReason, setInvalidLinkReason] = useState<string | null>(
+    null
+  );
+  const [userDismissed, setUserDismissed] = useState(false);
+
+  // Effect to check if the initial timestamp is out of range
+  useEffect(() => {
+    if (!timestamp || !initialState?.date || userDismissed) {
+      setInvalidLinkReason(null);
+      return;
+    }
+    const date = initialState.date;
+    if (date > today || date < allowedStart) {
+      if (!isAuthenticated && date >= adminStart && date <= today) {
+        setInvalidLinkReason("login");
+      } else {
+        setInvalidLinkReason("out_of_range");
+      }
+    } else {
+      setInvalidLinkReason(null);
+    }
+  }, [
+    timestamp,
+    isAuthenticated,
+    today,
+    allowedStart,
+    adminStart,
+    initialState,
+    userDismissed,
+  ]);
+
+  // Reset userDismissed when URL or auth state changes
+  useEffect(() => {
+    setUserDismissed(false);
+  }, [timestamp, isAuthenticated]);
 
   // Function to update URL with current selection
   const updateUrl = (date: Date, hour: string) => {
+    // Only update URL if the date is within the allowed range
+    if (date > today || date < allowedStart) {
+      return;
+    }
     const timestamp = createTimestamp(date, parseInt(hour));
     router.push(`?t=${timestamp}`, { scroll: false });
   };
@@ -128,7 +180,7 @@ export default function ArchivePage() {
   // Update handler for hour changes to include date
   const handleHourChange = (newHour: number, newDate: Date) => {
     // Check if the new date is within the allowed range
-    if (newDate > today || newDate < twoWeeksAgo) {
+    if (newDate > today || newDate < allowedStart) {
       return; // Don't update if outside the allowed range
     }
 
@@ -138,7 +190,26 @@ export default function ArchivePage() {
 
   return (
     <div className="container mx-auto px-4 py-8 pb-32 max-w-4xl min-h-screen">
-      <div className="hidden md:flex justify-end mb-4">
+      {invalidLinkReason && (
+        <div className="mb-4 p-3 rounded bg-yellow-100 dark:bg-yellow-900 text-yellow-900 dark:text-yellow-100 border border-yellow-300 dark:border-yellow-700 flex justify-between items-center">
+          <span>
+            {invalidLinkReason === "login"
+              ? "This archive is only available to signed-in users. Please sign in to access this date."
+              : "This archive is outside the available date range."}
+          </span>
+          <button
+            onClick={() => {
+              setInvalidLinkReason(null);
+              setUserDismissed(true);
+            }}
+            className="ml-2 text-yellow-900 dark:text-yellow-100 hover:text-yellow-700 dark:hover:text-yellow-300"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      <div className="flex justify-between items-center mb-4">
+        <LoginDialog />
         <ThemeToggle />
       </div>
       <Card className="border-none shadow-lg dark:bg-gray-800 py-0">
@@ -147,7 +218,8 @@ export default function ArchivePage() {
             WXYC Archive Player
           </CardTitle>
           <CardDescription className="text-purple-100">
-            Listen to WXYC programming from the past two weeks
+            Listen to WXYC programming from the{" "}
+            {selectedConfig.dateRange.description}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6">
@@ -160,7 +232,7 @@ export default function ArchivePage() {
                 mode="single"
                 selected={selectedDate}
                 onSelect={(date) => date && setSelectedDate(date)}
-                disabled={(date) => date > today || date < twoWeeksAgo}
+                disabled={(date) => date > today || date < allowedStart}
                 className="rounded-md border dark:bg-gray-800"
               />
             </div>
@@ -212,6 +284,7 @@ export default function ArchivePage() {
         selectedHour={Number.parseInt(selectedHour)}
         archiveSelected={archiveSelected}
         onHourChange={handleHourChange}
+        config={selectedConfig}
       />
     </div>
   );

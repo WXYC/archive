@@ -13,6 +13,7 @@ import {
   Radio,
 } from "lucide-react";
 import { formatTime, formatDate, getHourLabel } from "@/lib/utils";
+import { ArchiveConfig } from "@/config/archive";
 
 interface AudioPlayerProps {
   audioUrl: string | null;
@@ -22,6 +23,7 @@ interface AudioPlayerProps {
   selectedHour: number;
   archiveSelected: boolean;
   onHourChange: (hour: number, date: Date) => void;
+  config: ArchiveConfig;
 }
 
 export default function AudioPlayer({
@@ -32,6 +34,7 @@ export default function AudioPlayer({
   selectedHour,
   archiveSelected,
   onHourChange,
+  config,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -85,7 +88,7 @@ export default function AudioPlayer({
     }
   };
 
-  // Update the changeHour function to handle day changes
+  // Update the changeHour function to handle day changes and respect date range
   const changeHour = (hours: number) => {
     const newDate = new Date(selectedDate);
     let newHour = selectedHour + hours;
@@ -99,10 +102,19 @@ export default function AudioPlayer({
       newDate.setDate(newDate.getDate() + 1);
     }
 
+    // Check if the new date is within the allowed range
+    const today = new Date();
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - config.dateRange.days);
+
+    if (newDate > today || newDate < startDate) {
+      return; // Don't update if outside the allowed range
+    }
+
     onHourChange(newHour, newDate);
   };
 
-  // Add handler for when audio ends
+  // Update handler for when audio ends
   const handleAudioEnded = () => {
     setIsTransitioning(true);
     // Move to next hour
@@ -117,10 +129,10 @@ export default function AudioPlayer({
 
     // Check if the new date is within the allowed range
     const today = new Date();
-    const twoWeeksAgo = new Date();
-    twoWeeksAgo.setDate(today.getDate() - 14);
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - config.dateRange.days);
 
-    if (newDate > today || newDate < twoWeeksAgo) {
+    if (newDate > today || newDate < startDate) {
       // If outside range, stop playing
       setIsPlaying(false);
       setIsTransitioning(false);
