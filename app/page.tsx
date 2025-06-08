@@ -47,22 +47,25 @@ function ArchivePageContent() {
   // Helper function to parse timestamp from URL
   const parseTimestamp = (
     timestamp: string | null
-  ): { date: Date; hour: string } | null => {
-    if (!timestamp || timestamp.length !== 12) return null;
+  ): { date: Date; hour: string; minute: string; second: string } | null => {
+    if (!timestamp || timestamp.length !== 14) return null;
 
     try {
       const year = parseInt(timestamp.slice(0, 4));
       const month = parseInt(timestamp.slice(4, 6)) - 1; // JS months are 0-based
       const day = parseInt(timestamp.slice(6, 8));
       const hour = parseInt(timestamp.slice(8, 10));
+      const minute = parseInt(timestamp.slice(10, 12));
+      const second = parseInt(timestamp.slice(12, 14));
 
       const date = new Date(year, month, day);
       if (isNaN(date.getTime())) return null;
 
-      // Only return the date and hour; don't set state here
       return {
         date,
         hour: hour.toString(),
+        minute: minute.toString(),
+        second: second.toString(),
       };
     } catch {
       return null;
@@ -70,12 +73,19 @@ function ArchivePageContent() {
   };
 
   // Helper function to create timestamp for URL
-  const createTimestamp = (date: Date, hour: number): string => {
+  const createTimestamp = (
+    date: Date,
+    hour: number,
+    minute: number = 0,
+    second: number = 0
+  ): string => {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, "0");
     const day = date.getDate().toString().padStart(2, "0");
     const hourStr = hour.toString().padStart(2, "0");
-    return `${year}${month}${day}${hourStr}00`;
+    const minuteStr = minute.toString().padStart(2, "0");
+    const secondStr = second.toString().padStart(2, "0");
+    return `${year}${month}${day}${hourStr}${minuteStr}${secondStr}`;
   };
 
   // Initialize state from URL params if they exist, otherwise use yesterday at noon
@@ -89,9 +99,15 @@ function ArchivePageContent() {
   const [selectedHour, setSelectedHour] = useState<string>(
     initialState?.hour || "12"
   );
+  const [selectedMinute, setSelectedMinute] = useState<string>(
+    initialState?.minute || "0"
+  );
+  const [selectedSecond, setSelectedSecond] = useState<string>(
+    initialState?.second || "0"
+  );
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [archiveSelected, setArchiveSelected] = useState(false);
+  const [archiveSelected, setArchiveSelected] = useState(!!timestamp);
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
   const [invalidLinkReason, setInvalidLinkReason] = useState<string | null>(
     null
@@ -135,7 +151,12 @@ function ArchivePageContent() {
     if (date > today || date < allowedStart) {
       return;
     }
-    const timestamp = createTimestamp(date, parseInt(hour));
+    const timestamp = createTimestamp(
+      date,
+      parseInt(hour),
+      parseInt(selectedMinute),
+      parseInt(selectedSecond)
+    );
     router.push(`?t=${timestamp}`, { scroll: false });
   };
 
@@ -156,6 +177,10 @@ function ArchivePageContent() {
             isAuthenticated
           );
           setAudioUrl(url);
+          // If we have a timestamp in the URL, start playing automatically
+          if (timestamp) {
+            setIsPlaying(true);
+          }
         } catch (error) {
           console.error("Error getting audio URL:", error);
           setAudioUrl(null);
@@ -166,7 +191,7 @@ function ArchivePageContent() {
     }
 
     updateAudioUrl();
-  }, [selectedDate, selectedHour, archiveSelected, isAuthenticated]);
+  }, [selectedDate, selectedHour, archiveSelected, isAuthenticated, timestamp]);
 
   const handlePlay = () => {
     setArchiveSelected(true);
@@ -278,8 +303,14 @@ function ArchivePageContent() {
         setIsPlaying={setIsPlaying}
         selectedDate={selectedDate}
         selectedHour={Number.parseInt(selectedHour)}
+        selectedMinute={Number.parseInt(selectedMinute)}
+        selectedSecond={Number.parseInt(selectedSecond)}
         archiveSelected={archiveSelected}
         onHourChange={handleHourChange}
+        onTimeUpdate={(minute: number, second: number) => {
+          setSelectedMinute(minute.toString());
+          setSelectedSecond(second.toString());
+        }}
         config={selectedConfig}
       />
     </div>

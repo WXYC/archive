@@ -22,8 +22,11 @@ interface AudioPlayerProps {
   setIsPlaying: (isPlaying: boolean) => void;
   selectedDate: Date;
   selectedHour: number;
+  selectedMinute: number;
+  selectedSecond: number;
   archiveSelected: boolean;
   onHourChange: (hour: number, date: Date) => void;
+  onTimeUpdate: (minute: number, second: number) => void;
   config: ArchiveConfig;
 }
 
@@ -33,8 +36,11 @@ export default function AudioPlayer({
   setIsPlaying,
   selectedDate,
   selectedHour,
+  selectedMinute,
+  selectedSecond,
   archiveSelected,
   onHourChange,
+  onTimeUpdate,
   config,
 }: AudioPlayerProps) {
   const { isAuthenticated } = useAuth();
@@ -134,7 +140,12 @@ export default function AudioPlayer({
     if (audioUrl) {
       setIsLoading(true);
       setError(null);
-      setCurrentTime(0);
+      // Set initial time if provided
+      if (audioRef.current) {
+        const initialTime = selectedMinute * 60 + selectedSecond;
+        audioRef.current.currentTime = initialTime;
+        setCurrentTime(initialTime);
+      }
     } else {
       setIsLoading(false);
       setError(null);
@@ -142,7 +153,7 @@ export default function AudioPlayer({
       setDuration(0);
       setIsPlaying(false);
     }
-  }, [audioUrl, setIsPlaying]);
+  }, [audioUrl, setIsPlaying, selectedMinute, selectedSecond]);
 
   // Update audio play state when isPlaying changes
   useEffect(() => {
