@@ -138,7 +138,7 @@ export default function ArchivePage() {
 
   return (
     <div className="container mx-auto px-4 py-8 pb-32 max-w-4xl min-h-screen">
-      <div className="flex justify-end mb-4">
+      <div className="hidden md:flex justify-end mb-4">
         <ThemeToggle />
       </div>
       <Card className="border-none shadow-lg dark:bg-gray-800 py-0">
