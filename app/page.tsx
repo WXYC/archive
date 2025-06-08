@@ -17,8 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { formatDate, getArchiveUrl, getHourLabel } from "@/lib/utils";
+import { CalendarIcon } from "lucide-react";
 import AudioPlayer from "@/components/audio-player";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -113,6 +119,7 @@ function ArchivePageContent() {
     null
   );
   const [userDismissed, setUserDismissed] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   // Effect to check if the initial timestamp is out of range
   useEffect(() => {
@@ -210,7 +217,7 @@ function ArchivePageContent() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 pb-32 max-w-4xl min-h-screen">
+    <div className="container mx-auto px-4 py-3 sm:py-8 pb-32 max-w-4xl min-h-screen">
       {invalidLinkReason && (
         <div className="mb-4 p-3 rounded bg-yellow-100 dark:bg-yellow-900 text-yellow-900 dark:text-yellow-100 border border-yellow-300 dark:border-yellow-700 flex justify-between items-center">
           <span>
@@ -235,7 +242,7 @@ function ArchivePageContent() {
       </div>
       <Card className="border-none shadow-lg dark:bg-gray-800 py-0">
         <CardHeader className="bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-t-lg py-4">
-          <CardTitle className="text-2xl md:text-3xl font-bold">
+          <CardTitle className="text-2xl sm:text-3xl font-bold">
             WXYC Archive Player
           </CardTitle>
           <CardDescription className="text-purple-100">
@@ -243,19 +250,53 @@ function ArchivePageContent() {
             {selectedConfig.dateRange.description}
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex-1">
+        <CardContent className="py-2 px-6 sm:py-6">
+          <div className="flex flex-col sm:flex-row gap-6">
+            <div className="w-full sm:flex-1">
               <Label className="text-sm font-medium mb-2 block">
                 Select Date
               </Label>
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => date && setSelectedDate(date)}
-                disabled={(date) => date > today || date < allowedStart}
-                className="rounded-md border dark:bg-gray-800"
-              />
+              <div className="sm:hidden">
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formatDate(selectedDate)}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-[calc(100vw-2rem)] p-0"
+                    align="center"
+                    sideOffset={8}
+                  >
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          setSelectedDate(date);
+                          setCalendarOpen(false);
+                        }
+                      }}
+                      disabled={(date) => date > today || date < allowedStart}
+                      initialFocus
+                      className="w-full"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="hidden sm:block">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  disabled={(date) => date > today || date < allowedStart}
+                  className="rounded-md border dark:bg-gray-800 w-full"
+                />
+              </div>
             </div>
 
             <div className="flex-1">
