@@ -177,7 +177,7 @@ export default function AudioPlayer({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg z-50">
       <audio
         ref={audioRef}
         src={audioUrl || undefined}
@@ -198,9 +198,9 @@ export default function AudioPlayer({
       />
 
       {/* Progress bar at the very top */}
-      <div className="w-full h-1 bg-gray-200">
+      <div className="w-full h-1 bg-gray-200 dark:bg-gray-700">
         <div
-          className="h-full bg-purple-600 transition-all duration-100"
+          className="h-full bg-purple-600 dark:bg-purple-500 transition-all duration-100"
           style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
         ></div>
       </div>
@@ -214,6 +214,7 @@ export default function AudioPlayer({
             onClick={() => changeHour(-1)}
             disabled={isLoading || !audioUrl}
             title="Previous Hour"
+            className="dark:text-gray-300 dark:hover:bg-gray-700"
           >
             <SkipBack className="h-4 w-4" />
           </Button>
@@ -223,12 +224,12 @@ export default function AudioPlayer({
             size="icon"
             onClick={togglePlayPause}
             disabled={isLoading || !audioUrl}
-            className="h-10 w-10 rounded-full hover:bg-purple-100"
+            className="h-10 w-10 rounded-full hover:bg-purple-100 dark:hover:bg-purple-900/30"
           >
             {isPlaying ? (
-              <Pause className="h-5 w-5 text-purple-700" />
+              <Pause className="h-5 w-5 text-purple-700 dark:text-purple-400" />
             ) : (
-              <Play className="h-5 w-5 ml-0.5 text-purple-700" />
+              <Play className="h-5 w-5 ml-0.5 text-purple-700 dark:text-purple-400" />
             )}
           </Button>
 
@@ -238,6 +239,7 @@ export default function AudioPlayer({
             onClick={() => changeHour(1)}
             disabled={isLoading || !audioUrl}
             title="Next Hour"
+            className="dark:text-gray-300 dark:hover:bg-gray-700"
           >
             <SkipForward className="h-4 w-4" />
           </Button>
@@ -245,19 +247,17 @@ export default function AudioPlayer({
 
         {/* Time and Progress */}
         <div className="hidden sm:flex items-center space-x-2 flex-1 max-w-md">
-          <span className="text-xs text-gray-500 w-12">
+          <span className="text-xs text-gray-500 dark:text-gray-400 w-12">
             {formatTime(currentTime)}
           </span>
           <Slider
             value={[currentTime]}
-            min={0}
-            max={duration || 100}
+            max={duration}
             step={1}
             onValueChange={handleSeek}
-            disabled={isLoading || !audioUrl}
             className="flex-1"
           />
-          <span className="text-xs text-gray-500 w-12">
+          <span className="text-xs text-gray-500 dark:text-gray-400 w-12">
             {formatTime(duration)}
           </span>
         </div>
@@ -288,13 +288,12 @@ export default function AudioPlayer({
         </div>
 
         {/* Volume Control */}
-        <div className="relative">
+        <div className="flex items-center space-x-2 ml-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleMute}
-            onMouseEnter={() => setShowVolumeControl(true)}
-            disabled={isLoading || !audioUrl}
+            className="dark:text-gray-300 dark:hover:bg-gray-700"
           >
             {isMuted ? (
               <VolumeX className="h-4 w-4" />
@@ -302,26 +301,29 @@ export default function AudioPlayer({
               <Volume2 className="h-4 w-4" />
             )}
           </Button>
-
-          {showVolumeControl && (
-            <div
-              className="absolute bottom-full right-0 mb-2 p-3 bg-white shadow-lg rounded-lg w-36"
-              onMouseEnter={() => setShowVolumeControl(true)}
-              onMouseLeave={() => setShowVolumeControl(false)}
-            >
-              <Slider
-                value={[isMuted ? 0 : volume]}
-                min={0}
-                max={1}
-                step={0.01}
-                onValueChange={handleVolumeChange}
-                disabled={isLoading || !audioUrl}
-                orientation="horizontal"
-              />
-            </div>
-          )}
+          <div
+            className={`relative ${
+              showVolumeControl ? "w-24" : "w-0"
+            } transition-all duration-200 overflow-hidden`}
+          >
+            <Slider
+              value={[volume]}
+              min={0}
+              max={1}
+              step={0.01}
+              onValueChange={handleVolumeChange}
+              className="w-full"
+            />
+          </div>
         </div>
       </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="absolute top-0 left-0 right-0 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm p-2 text-center">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

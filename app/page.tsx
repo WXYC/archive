@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate, getArchiveUrl, getHourLabel } from "@/lib/utils";
 import AudioPlayer from "@/components/audio-player";
 import { Label } from "@/components/ui/label";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function ArchivePage() {
   const router = useRouter();
@@ -137,8 +138,11 @@ export default function ArchivePage() {
 
   return (
     <div className="container mx-auto px-4 py-8 pb-32 max-w-4xl min-h-screen">
-      <Card className="border-none shadow-lg">
-        <CardHeader className="bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-t-lg">
+      <div className="flex justify-end mb-4">
+        <ThemeToggle />
+      </div>
+      <Card className="border-none shadow-lg dark:bg-gray-800 py-0">
+        <CardHeader className="bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-t-lg py-4">
           <CardTitle className="text-2xl md:text-3xl font-bold">
             WXYC Archive Player
           </CardTitle>
@@ -157,7 +161,7 @@ export default function ArchivePage() {
                 selected={selectedDate}
                 onSelect={(date) => date && setSelectedDate(date)}
                 disabled={(date) => date > today || date < twoWeeksAgo}
-                className="rounded-md border"
+                className="rounded-md border dark:bg-gray-800"
               />
             </div>
 
@@ -178,16 +182,16 @@ export default function ArchivePage() {
                 </SelectContent>
               </Select>
 
-              <div className="mt-6 p-4 bg-purple-50 rounded-lg">
-                <h3 className="font-medium text-purple-900">
+              <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                <h3 className="font-medium text-purple-900 dark:text-purple-100">
                   Selected Archive
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                   {formatDate(selectedDate)} at{" "}
                   {getHourLabel(Number.parseInt(selectedHour))}
                 </p>
                 <Button
-                  className="w-full mt-4 bg-purple-600 hover:bg-purple-700"
+                  className="w-full mt-4 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
                   onClick={handlePlay}
                   disabled={isLoadingUrl}
                 >
