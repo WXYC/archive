@@ -214,6 +214,9 @@ function ArchivePageContent() {
 
     setSelectedDate(newDate);
     setSelectedHour(newHour.toString());
+    // Reset minute and second to 0 when changing hours
+    setSelectedMinute("0");
+    setSelectedSecond("0");
   };
 
   return (
