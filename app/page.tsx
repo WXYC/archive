@@ -157,7 +157,8 @@ export default function ArchivePage() {
         try {
           const url = await getArchiveUrl(
             selectedDate,
-            Number.parseInt(selectedHour)
+            Number.parseInt(selectedHour),
+            isAuthenticated
           );
           setAudioUrl(url);
         } catch (error) {
@@ -170,7 +171,7 @@ export default function ArchivePage() {
     }
 
     updateAudioUrl();
-  }, [selectedDate, selectedHour, archiveSelected]);
+  }, [selectedDate, selectedHour, archiveSelected, isAuthenticated]);
 
   const handlePlay = () => {
     setArchiveSelected(true);

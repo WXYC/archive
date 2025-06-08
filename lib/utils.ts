@@ -45,8 +45,11 @@ export function getHourLabel(hour: number): string {
 /**
  * Construct the S3 URL for an archive based on date and hour
  */
-export async function getArchiveUrl(date: Date, hour: number): Promise<string> {
-  // Format: YYYY-MM-DD_HH.mp3
+export async function getArchiveUrl(
+  date: Date,
+  hour: number,
+  isAuthenticated: boolean
+): Promise<string> {
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, "0");
   const day = date.getDate().toString().padStart(2, "0");
@@ -55,9 +58,15 @@ export async function getArchiveUrl(date: Date, hour: number): Promise<string> {
   const key = `${year}/${month}/${day}/${year}${month}${day}${hourStr}00.mp3`;
 
   try {
-    const response = await fetch(
-      `/api/signed-url?key=${encodeURIComponent(key)}`
-    );
+    const response = await fetch("/api/signed-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        key,
+        ...(isAuthenticated && { isAuthenticated: true }),
+      }),
+    });
+
     const data = await response.json();
 
     if (!response.ok) {

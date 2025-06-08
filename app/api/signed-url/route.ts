@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { cookies } from "next/headers";
 import { archiveConfigs, getDateRange } from "@/config/archive";
 
 // Try creating the client with explicit error handling
@@ -18,9 +17,8 @@ try {
   console.error("Error creating S3 client:", error);
 }
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const key = searchParams.get("key");
+export async function POST(request: Request) {
+  const { key, isAuthenticated = false } = await request.json();
 
   if (!key) {
     return NextResponse.json({ error: "Key is required" }, { status: 400 });
@@ -53,10 +51,6 @@ export async function GET(request: Request) {
     parseInt(hour)
   );
 
-  // Check authentication
-  const cookieStore = await cookies();
-  const isAuthenticated = cookieStore.get("authenticated")?.value === "true";
-
   // Get appropriate date range based on authentication
   const config = isAuthenticated ? archiveConfigs.dj : archiveConfigs.default;
   const { today, startDate } = getDateRange(config);
@@ -73,6 +67,7 @@ export async function GET(request: Request) {
     const command = new GetObjectCommand({
       Bucket: "wxyc-archive",
       Key: key,
+      ResponseContentDisposition: `attachment; filename="wxyc_${year}${month}${day}_${hour}00.mp3"`,
     });
 
     const signedUrl = await getSignedUrl(s3Client, command, {

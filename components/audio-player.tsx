@@ -11,9 +11,11 @@ import {
   SkipBack,
   SkipForward,
   Radio,
+  Download,
 } from "lucide-react";
 import { formatTime, formatDate, getHourLabel } from "@/lib/utils";
 import { ArchiveConfig } from "@/config/archive";
+import { useAuth } from "@/lib/auth";
 
 interface AudioPlayerProps {
   audioUrl: string | null;
@@ -36,14 +38,14 @@ export default function AudioPlayer({
   onHourChange,
   config,
 }: AudioPlayerProps) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
+  const { isAuthenticated } = useAuth();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showVolumeControl, setShowVolumeControl] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
   // Handle play/pause
@@ -188,45 +190,20 @@ export default function AudioPlayer({
     }
   };
 
+  const handleDownload = () => {
+    if (!audioUrl) return;
+    window.open(audioUrl, "_blank");
+  };
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg z-50">
-      <audio
-        ref={audioRef}
-        src={audioUrl || undefined}
-        onTimeUpdate={() =>
-          audioRef.current && setCurrentTime(audioRef.current.currentTime)
-        }
-        onLoadedMetadata={handleLoadedMetadata}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onError={() => {
-          setError("Error loading audio file. Please try another archive.");
-          setIsLoading(false);
-          setIsPlaying(false);
-          setIsTransitioning(false);
-        }}
-        onLoadStart={() => setIsLoading(true)}
-        onEnded={handleAudioEnded}
-      />
-
-      {/* Progress bar at the very top */}
-      <div className="w-full h-1 bg-gray-200 dark:bg-gray-700">
-        <div
-          className="h-full bg-purple-600 dark:bg-purple-500 transition-all duration-100"
-          style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-        ></div>
-      </div>
-
-      <div className="container mx-auto px-4 py-3 flex items-center">
-        {/* Play/Pause and Skip Controls */}
-        <div className="flex items-center space-x-2 mr-4">
+    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4">
+      <div className="container mx-auto max-w-4xl">
+        <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => changeHour(-1)}
-            disabled={isLoading || !audioUrl}
-            title="Previous Hour"
-            className="dark:text-gray-300 dark:hover:bg-gray-700"
+            disabled={!archiveSelected || isTransitioning}
           >
             <SkipBack className="h-4 w-4" />
           </Button>
@@ -235,13 +212,14 @@ export default function AudioPlayer({
             variant="ghost"
             size="icon"
             onClick={togglePlayPause}
-            disabled={isLoading || !audioUrl}
-            className="h-10 w-10 rounded-full hover:bg-purple-100 dark:hover:bg-purple-900/30"
+            disabled={!audioUrl || isLoading}
           >
-            {isPlaying ? (
-              <Pause className="h-5 w-5 text-purple-700 dark:text-purple-400" />
+            {isLoading ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : isPlaying ? (
+              <Pause className="h-4 w-4" />
             ) : (
-              <Play className="h-5 w-5 ml-0.5 text-purple-700 dark:text-purple-400" />
+              <Play className="h-4 w-4" />
             )}
           </Button>
 
@@ -249,63 +227,32 @@ export default function AudioPlayer({
             variant="ghost"
             size="icon"
             onClick={() => changeHour(1)}
-            disabled={isLoading || !audioUrl}
-            title="Next Hour"
-            className="dark:text-gray-300 dark:hover:bg-gray-700"
+            disabled={!archiveSelected || isTransitioning}
           >
             <SkipForward className="h-4 w-4" />
           </Button>
-        </div>
 
-        {/* Time and Progress */}
-        <div className="hidden sm:flex items-center space-x-2 flex-1 max-w-md">
-          <span className="text-xs text-gray-500 dark:text-gray-400 w-12">
-            {formatTime(currentTime)}
-          </span>
-          <Slider
-            value={[currentTime]}
-            max={duration}
-            step={1}
-            onValueChange={handleSeek}
-            className="flex-1"
-          />
-          <span className="text-xs text-gray-500 dark:text-gray-400 w-12">
-            {formatTime(duration)}
-          </span>
-        </div>
+          <div className="flex-1 flex items-center gap-2">
+            <span className="text-sm text-gray-500 dark:text-gray-400 w-12">
+              {formatTime(currentTime)}
+            </span>
+            <Slider
+              value={[currentTime]}
+              max={duration}
+              step={1}
+              onValueChange={handleSeek}
+              className="flex-1"
+            />
+            <span className="text-sm text-gray-500 dark:text-gray-400 w-12">
+              {formatTime(duration)}
+            </span>
+          </div>
 
-        {/* Now Playing Info */}
-        <div className="flex-1 mx-4 truncate">
-          {isLoading ? (
-            <div className="text-sm font-medium animate-pulse">
-              Loading archive...
-            </div>
-          ) : error ? (
-            <div className="text-sm text-red-500">{error}</div>
-          ) : archiveSelected && audioUrl ? (
-            <div className="flex items-center">
-              <Radio className="h-5 w-5 text-purple-600 mr-2" />
-              <div className="truncate">
-                <div className="text-sm font-medium">WXYC Archive</div>
-                <div className="text-xs text-gray-500 truncate">
-                  {formatDate(selectedDate)} at {getHourLabel(selectedHour)}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-sm text-gray-500">
-              Select a date and time, then click "Listen Now"
-            </div>
-          )}
-        </div>
-
-        {/* Volume Control */}
-        <div className="flex items-center space-x-2 ml-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={toggleMute}
-            className="dark:text-gray-300 dark:hover:bg-gray-700"
+            disabled={!audioUrl}
           >
             {isMuted ? (
               <VolumeX className="h-4 w-4" />
@@ -313,29 +260,44 @@ export default function AudioPlayer({
               <Volume2 className="h-4 w-4" />
             )}
           </Button>
-          <div
-            className={`relative ${
-              showVolumeControl ? "w-24" : "w-0"
-            } transition-all duration-200 overflow-hidden`}
-          >
-            <Slider
-              value={[volume]}
-              min={0}
-              max={1}
-              step={0.01}
-              onValueChange={handleVolumeChange}
-              className="w-full"
-            />
-          </div>
-        </div>
-      </div>
 
-      {/* Error Message */}
-      {error && (
-        <div className="absolute top-0 left-0 right-0 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm p-2 text-center">
-          {error}
+          {isAuthenticated && audioUrl && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleDownload}
+              title="Download MP3"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          )}
         </div>
-      )}
+
+        {error && (
+          <div className="mt-2 text-sm text-red-500 dark:text-red-400">
+            {error}
+          </div>
+        )}
+
+        <audio
+          ref={audioRef}
+          src={audioUrl || undefined}
+          onTimeUpdate={() =>
+            audioRef.current && setCurrentTime(audioRef.current.currentTime)
+          }
+          onLoadedMetadata={handleLoadedMetadata}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onError={() => {
+            setError("Error loading audio file. Please try another archive.");
+            setIsLoading(false);
+            setIsPlaying(false);
+            setIsTransitioning(false);
+          }}
+          onLoadStart={() => setIsLoading(true)}
+          onEnded={handleAudioEnded}
+        />
+      </div>
     </div>
   );
 }
