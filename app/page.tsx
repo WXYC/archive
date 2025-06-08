@@ -215,8 +215,8 @@ function ArchivePageContent() {
         <div className="mb-4 p-3 rounded bg-yellow-100 dark:bg-yellow-900 text-yellow-900 dark:text-yellow-100 border border-yellow-300 dark:border-yellow-700 flex justify-between items-center">
           <span>
             {invalidLinkReason === "login"
-              ? "This archive is only available to signed-in users. Please sign in to access this date."
-              : "This archive is outside the available date range."}
+              ? "This show is only available to signed-in users. Please sign in to access this date."
+              : "This show is outside the available date range."}
           </span>
           <button
             onClick={() => {

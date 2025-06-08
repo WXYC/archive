@@ -79,3 +79,18 @@ export async function getArchiveUrl(
     throw error;
   }
 }
+
+export function createTimestamp(
+  date: Date,
+  hour: number,
+  minute: number = 0,
+  second: number = 0
+): string {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  const hourStr = hour.toString().padStart(2, "0");
+  const minuteStr = minute.toString().padStart(2, "0");
+  const secondStr = second.toString().padStart(2, "0");
+  return `${year}${month}${day}${hourStr}${minuteStr}${secondStr}`;
+}

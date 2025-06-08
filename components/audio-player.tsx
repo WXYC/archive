@@ -15,6 +15,7 @@ import {
 import { formatTime } from "@/lib/utils";
 import { ArchiveConfig } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
+import { ShareDialog } from "@/components/share-dialog";
 
 interface AudioPlayerProps {
   audioUrl: string | null;
@@ -266,6 +267,12 @@ export default function AudioPlayer({
               <Download className="h-4 w-4" />
             </Button>
           )}
+
+          <ShareDialog
+            selectedDate={selectedDate}
+            selectedHour={selectedHour}
+            currentTime={currentTime}
+          />
         </div>
 
         {error && (
