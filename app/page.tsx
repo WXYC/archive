@@ -330,9 +330,8 @@ function ArchivePageContent() {
                 <Button
                   className="w-full mt-4 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
                   onClick={handlePlay}
-                  disabled={isLoadingUrl}
                 >
-                  {isLoadingUrl ? "Loading..." : "Listen Now"}
+                  Listen Now
                 </Button>
               </div>
             </div>
