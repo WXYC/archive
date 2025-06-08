@@ -36,13 +36,13 @@ export default function ArchivePage() {
   const searchParams = useSearchParams();
   const { isAuthenticated } = useAuth();
 
-  // Use admin config if authenticated, otherwise use default
-  const selectedConfig = isAuthenticated ? archiveConfigs.admin : defaultConfig;
-  const adminConfig = archiveConfigs.admin;
+  // Use dj config if authenticated, otherwise use default
+  const selectedConfig = isAuthenticated ? archiveConfigs.dj : defaultConfig;
+  const djConfig = archiveConfigs.dj;
 
   // Get date range from selected config
   const { today, startDate: allowedStart } = getDateRange(selectedConfig);
-  const { startDate: adminStart } = getDateRange(adminConfig);
+  const { startDate: djStart } = getDateRange(djConfig);
 
   // Set default to yesterday at noon
   const yesterday = new Date(today);
@@ -111,7 +111,7 @@ export default function ArchivePage() {
     }
     const date = initialState.date;
     if (date > today || date < allowedStart) {
-      if (!isAuthenticated && date >= adminStart && date <= today) {
+      if (!isAuthenticated && date >= djStart && date <= today) {
         setInvalidLinkReason("login");
       } else {
         setInvalidLinkReason("out_of_range");
@@ -124,7 +124,7 @@ export default function ArchivePage() {
     isAuthenticated,
     today,
     allowedStart,
-    adminStart,
+    djStart,
     initialState,
     userDismissed,
   ]);

@@ -15,13 +15,7 @@ export const defaultConfig: ArchiveConfig = {
 // Example configurations for different user types
 export const archiveConfigs: Record<string, ArchiveConfig> = {
   default: defaultConfig,
-  premium: {
-    dateRange: {
-      days: 30,
-      description: "past month",
-    },
-  },
-  admin: {
+  dj: {
     dateRange: {
       days: 90,
       description: "past three months",
