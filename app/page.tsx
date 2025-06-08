@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
@@ -22,18 +23,78 @@ import AudioPlayer from "@/components/audio-player";
 import { Label } from "@/components/ui/label";
 
 export default function ArchivePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   // Get date range (today to 2 weeks ago)
   const today = new Date();
   const twoWeeksAgo = new Date();
   twoWeeksAgo.setDate(today.getDate() - 14);
 
+  // Set default to yesterday at noon
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  yesterday.setHours(12, 0, 0, 0);
+
+  // Helper function to parse timestamp from URL
+  const parseTimestamp = (
+    timestamp: string | null
+  ): { date: Date; hour: string } | null => {
+    if (!timestamp || timestamp.length !== 12) return null;
+
+    try {
+      const year = parseInt(timestamp.slice(0, 4));
+      const month = parseInt(timestamp.slice(4, 6)) - 1; // JS months are 0-based
+      const day = parseInt(timestamp.slice(6, 8));
+      const hour = parseInt(timestamp.slice(8, 10));
+
+      const date = new Date(year, month, day);
+      if (isNaN(date.getTime())) return null;
+
+      return {
+        date,
+        hour: hour.toString(),
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  // Helper function to create timestamp for URL
+  const createTimestamp = (date: Date, hour: number): string => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const day = date.getDate().toString().padStart(2, "0");
+    const hourStr = hour.toString().padStart(2, "0");
+    return `${year}${month}${day}${hourStr}00`;
+  };
+
+  // Initialize state from URL params if they exist, otherwise use yesterday at noon
+  const timestamp = searchParams.get("t");
+  const initialState = timestamp ? parseTimestamp(timestamp) : null;
+
   // State
-  const [selectedDate, setSelectedDate] = useState<Date>(today);
-  const [selectedHour, setSelectedHour] = useState<string>("12");
+  const [selectedDate, setSelectedDate] = useState<Date>(
+    initialState?.date || yesterday
+  );
+  const [selectedHour, setSelectedHour] = useState<string>(
+    initialState?.hour || "12"
+  );
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [archiveSelected, setArchiveSelected] = useState(false);
   const [isLoadingUrl, setIsLoadingUrl] = useState(false);
+
+  // Function to update URL with current selection
+  const updateUrl = (date: Date, hour: string) => {
+    const timestamp = createTimestamp(date, parseInt(hour));
+    router.push(`?t=${timestamp}`, { scroll: false });
+  };
+
+  // Update URL when date or hour changes
+  useEffect(() => {
+    updateUrl(selectedDate, selectedHour);
+  }, [selectedDate, selectedHour]);
 
   // Update audio URL when date or hour changes
   useEffect(() => {
