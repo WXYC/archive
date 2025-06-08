@@ -16,12 +16,14 @@ interface ShareDialogProps {
   selectedDate: Date;
   selectedHour: number;
   currentTime: number;
+  disabled?: boolean;
 }
 
 export function ShareDialog({
   selectedDate,
   selectedHour,
   currentTime,
+  disabled = false,
 }: ShareDialogProps) {
   const [copied, setCopied] = useState(false);
   const [includeTime, setIncludeTime] = useState(false);
@@ -47,7 +49,7 @@ export function ShareDialog({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title="Share">
+        <Button variant="ghost" size="icon" title="Share" disabled={disabled}>
           <Share2 className="h-4 w-4" />
         </Button>
       </DialogTrigger>

@@ -41,7 +41,6 @@ export default function AudioPlayer({
   selectedSecond,
   archiveSelected,
   onHourChange,
-  onTimeUpdate,
   config,
 }: AudioPlayerProps) {
   const { isAuthenticated } = useAuth();
@@ -272,6 +271,7 @@ export default function AudioPlayer({
             selectedDate={selectedDate}
             selectedHour={selectedHour}
             currentTime={currentTime}
+            disabled={!audioUrl}
           />
         </div>
 
