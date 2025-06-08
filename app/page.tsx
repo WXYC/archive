@@ -114,7 +114,6 @@ function ArchivePageContent() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [archiveSelected, setArchiveSelected] = useState(!!timestamp);
-  const [isLoadingUrl, setIsLoadingUrl] = useState(false);
   const [invalidLinkReason, setInvalidLinkReason] = useState<string | null>(
     null
   );
@@ -176,7 +175,6 @@ function ArchivePageContent() {
   useEffect(() => {
     async function updateAudioUrl() {
       if (selectedDate && selectedHour && archiveSelected) {
-        setIsLoadingUrl(true);
         try {
           const url = await getArchiveUrl(
             selectedDate,
@@ -191,8 +189,6 @@ function ArchivePageContent() {
         } catch (error) {
           console.error("Error getting audio URL:", error);
           setAudioUrl(null);
-        } finally {
-          setIsLoadingUrl(false);
         }
       }
     }
