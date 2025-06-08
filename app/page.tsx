@@ -292,6 +292,12 @@ function ArchivePageContent() {
                 </Popover>
               </div>
               <div className="hidden sm:block">
+                <style jsx global>{`
+                  .dark button[data-selected-single="true"]:hover {
+                    background-color: var(--primary) !important;
+                    color: var(--primary-foreground) !important;
+                  }
+                `}</style>
                 <Calendar
                   mode="single"
                   selected={selectedDate}
