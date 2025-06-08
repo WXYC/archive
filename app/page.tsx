@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -23,15 +23,10 @@ import AudioPlayer from "@/components/audio-player";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LoginDialog } from "@/components/login-dialog";
-import {
-  defaultConfig,
-  getDateRange,
-  archiveConfigs,
-  ArchiveConfig,
-} from "@/config/archive";
+import { defaultConfig, getDateRange, archiveConfigs } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
 
-export default function ArchivePage() {
+function ArchivePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated } = useAuth();
@@ -288,5 +283,13 @@ export default function ArchivePage() {
         config={selectedConfig}
       />
     </div>
+  );
+}
+
+export default function ArchivePage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ArchivePageContent />
+    </Suspense>
   );
 }

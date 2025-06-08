@@ -10,10 +10,9 @@ import {
   VolumeX,
   SkipBack,
   SkipForward,
-  Radio,
   Download,
 } from "lucide-react";
-import { formatTime, formatDate, getHourLabel } from "@/lib/utils";
+import { formatTime } from "@/lib/utils";
 import { ArchiveConfig } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
 
@@ -40,7 +39,6 @@ export default function AudioPlayer({
 }: AudioPlayerProps) {
   const { isAuthenticated } = useAuth();
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -57,20 +55,6 @@ export default function AudioPlayer({
         audioRef.current.play();
       }
       setIsPlaying(!isPlaying);
-    }
-  };
-
-  // Handle volume change
-  const handleVolumeChange = (value: number[]) => {
-    const newVolume = value[0];
-    setVolume(newVolume);
-    if (audioRef.current) {
-      audioRef.current.volume = newVolume;
-    }
-    if (newVolume === 0) {
-      setIsMuted(true);
-    } else {
-      setIsMuted(false);
     }
   };
 
