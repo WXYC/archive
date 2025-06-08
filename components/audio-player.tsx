@@ -72,11 +72,17 @@ export default function AudioPlayer({
     }
   };
 
-  // Handle seeking
+  // Handle seeking with debounce for mobile
   const handleSeek = (value: number[]) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = value[0];
-      setCurrentTime(value[0]);
+      const newTime = value[0];
+      setCurrentTime(newTime);
+      // Use requestAnimationFrame to ensure smooth scrubbing on mobile
+      requestAnimationFrame(() => {
+        if (audioRef.current) {
+          audioRef.current.currentTime = newTime;
+        }
+      });
     }
   };
 
@@ -140,12 +146,7 @@ export default function AudioPlayer({
     if (audioUrl) {
       setIsLoading(true);
       setError(null);
-      // Set initial time if provided
-      if (audioRef.current) {
-        const initialTime = selectedMinute * 60 + selectedSecond;
-        audioRef.current.currentTime = initialTime;
-        setCurrentTime(initialTime);
-      }
+      // Remove setting initial time here as it might be too early
     } else {
       setIsLoading(false);
       setError(null);
@@ -153,7 +154,7 @@ export default function AudioPlayer({
       setDuration(0);
       setIsPlaying(false);
     }
-  }, [audioUrl, setIsPlaying, selectedMinute, selectedSecond]);
+  }, [audioUrl, setIsPlaying]);
 
   // Update audio play state when isPlaying changes
   useEffect(() => {
@@ -174,6 +175,12 @@ export default function AudioPlayer({
     if (audioRef.current) {
       setDuration(audioRef.current.duration);
       setIsLoading(false);
+
+      // Set initial time after metadata is loaded
+      const initialTime = selectedMinute * 60 + selectedSecond;
+      audioRef.current.currentTime = initialTime;
+      setCurrentTime(initialTime);
+
       if (isTransitioning) {
         // If we're transitioning between tracks, start playing immediately
         audioRef.current.play().catch((err) => {
