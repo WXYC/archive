@@ -12,7 +12,7 @@ import {
   SkipForward,
   Download,
 } from "lucide-react";
-import { formatTime, getHourLabel } from "@/lib/utils";
+import { formatTime } from "@/lib/utils";
 import { ArchiveConfig } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
 import { ShareDialog } from "@/components/share-dialog";
