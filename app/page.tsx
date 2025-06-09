@@ -182,10 +182,6 @@ function ArchivePageContent() {
             isAuthenticated
           );
           setAudioUrl(url);
-          // If we have a timestamp in the URL, start playing automatically
-          if (timestamp) {
-            setIsPlaying(true);
-          }
         } catch (error) {
           console.error("Error getting audio URL:", error);
           setAudioUrl(null);
@@ -194,7 +190,7 @@ function ArchivePageContent() {
     }
 
     updateAudioUrl();
-  }, [selectedDate, selectedHour, archiveSelected, isAuthenticated, timestamp]);
+  }, [selectedDate, selectedHour, archiveSelected, isAuthenticated]);
 
   const handlePlay = () => {
     if (isPlaying) {
