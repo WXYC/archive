@@ -455,7 +455,7 @@ export default function AudioPlayer({
               });
               setIsPlaying(false);
             }}
-            onError={(e) => {
+            onError={() => {
               console.error("[Audio] Error event:", {
                 error: audioRef.current?.error,
                 readyState: audioRef.current?.readyState,
