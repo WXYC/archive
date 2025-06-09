@@ -127,11 +127,21 @@ export default function AudioPlayer({
   const handleSeek = (value: number[]) => {
     if (audioRef.current) {
       const newTime = value[0];
+      console.log("[Audio] Seeking:", {
+        from: audioRef.current.currentTime,
+        to: newTime,
+        readyState: audioRef.current.readyState,
+        networkState: audioRef.current.networkState,
+      });
       setCurrentTime(newTime);
       // Use requestAnimationFrame to ensure smooth scrubbing on mobile
       requestAnimationFrame(() => {
         if (audioRef.current) {
           audioRef.current.currentTime = newTime;
+          console.log("[Audio] After seek:", {
+            currentTime: audioRef.current.currentTime,
+            readyState: audioRef.current.readyState,
+          });
         }
       });
     }
@@ -195,9 +205,13 @@ export default function AudioPlayer({
   // Update audio element when URL changes
   useEffect(() => {
     if (audioUrl) {
+      console.log("[Audio] URL changed:", {
+        url: audioUrl,
+        readyState: audioRef.current?.readyState,
+        networkState: audioRef.current?.networkState,
+      });
       setIsLoading(true);
       setError(null);
-      // Remove setting initial time here as it might be too early
     } else {
       setIsLoading(false);
       setError(null);
@@ -210,9 +224,14 @@ export default function AudioPlayer({
   // Update audio play state when isPlaying changes
   useEffect(() => {
     if (audioRef.current && audioUrl) {
+      console.log("[Audio] Play state changing:", {
+        isPlaying,
+        readyState: audioRef.current.readyState,
+        currentTime: audioRef.current.currentTime,
+      });
       if (isPlaying) {
         audioRef.current.play().catch((err) => {
-          console.error("Error playing audio:", err);
+          console.error("[Audio] Error playing audio:", err);
           setIsPlaying(false);
         });
       } else {
@@ -224,18 +243,32 @@ export default function AudioPlayer({
   // Handle loaded metadata
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
+      console.log("[Audio] Metadata loaded:", {
+        duration: audioRef.current.duration,
+        readyState: audioRef.current.readyState,
+        networkState: audioRef.current.networkState,
+        currentTime: audioRef.current.currentTime,
+        selectedMinute,
+        selectedSecond,
+        initialTime: selectedMinute * 60 + selectedSecond,
+      });
       setDuration(audioRef.current.duration);
       setIsLoading(false);
 
       // Set initial time after metadata is loaded
       const initialTime = selectedMinute * 60 + selectedSecond;
+      console.log("[Audio] Attempting to set initial time:", initialTime);
       audioRef.current.currentTime = initialTime;
+      console.log("[Audio] After setting initial time:", {
+        currentTime: audioRef.current.currentTime,
+        readyState: audioRef.current.readyState,
+      });
       setCurrentTime(initialTime);
 
       if (isTransitioning) {
         // If we're transitioning between tracks, start playing immediately
         audioRef.current.play().catch((err) => {
-          console.error("Error playing audio:", err);
+          console.error("[Audio] Error playing audio:", err);
           setIsPlaying(false);
         });
         setIsTransitioning(false);
@@ -408,15 +441,38 @@ export default function AudioPlayer({
               }
             }}
             onLoadedMetadata={handleLoadedMetadata}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onError={() => {
+            onPlay={() => {
+              console.log("[Audio] Play event fired:", {
+                currentTime: audioRef.current?.currentTime,
+                readyState: audioRef.current?.readyState,
+              });
+              setIsPlaying(true);
+            }}
+            onPause={() => {
+              console.log("[Audio] Pause event fired:", {
+                currentTime: audioRef.current?.currentTime,
+                readyState: audioRef.current?.readyState,
+              });
+              setIsPlaying(false);
+            }}
+            onError={(e) => {
+              console.error("[Audio] Error event:", {
+                error: audioRef.current?.error,
+                readyState: audioRef.current?.readyState,
+                networkState: audioRef.current?.networkState,
+              });
               setError("Error loading audio file. Please try another archive.");
               setIsLoading(false);
               setIsPlaying(false);
               setIsTransitioning(false);
             }}
-            onLoadStart={() => setIsLoading(true)}
+            onLoadStart={() => {
+              console.log("[Audio] Load start:", {
+                readyState: audioRef.current?.readyState,
+                networkState: audioRef.current?.networkState,
+              });
+              setIsLoading(true);
+            }}
             onEnded={handleAudioEnded}
           />
         </div>
