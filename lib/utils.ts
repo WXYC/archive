@@ -25,7 +25,7 @@ export function formatTime(seconds: number): string {
   const secs = Math.floor(seconds % 60);
 
   return [
-    hours > 0 ? hours.toString().padStart(2, "0") : null,
+    hours > 0 ? hours.toString().padStart(1, "0") : null,
     hours > 0 ? minutes.toString().padStart(2, "0") : minutes.toString(),
     secs.toString().padStart(2, "0"),
   ]
