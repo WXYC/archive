@@ -258,20 +258,43 @@ export default function AudioPlayer({
       // Set initial time after metadata is loaded
       const initialTime = selectedMinute * 60 + selectedSecond;
       console.log("[Audio] Attempting to set initial time:", initialTime);
-      audioRef.current.currentTime = initialTime;
-      console.log("[Audio] After setting initial time:", {
-        currentTime: audioRef.current.currentTime,
-        readyState: audioRef.current.readyState,
-      });
-      setCurrentTime(initialTime);
 
-      if (isTransitioning) {
-        // If we're transitioning between tracks, start playing immediately
-        audioRef.current.play().catch((err) => {
-          console.error("[Audio] Error playing audio:", err);
-          setIsPlaying(false);
+      // Ensure the audio is ready before setting time and playing
+      if (audioRef.current.readyState >= 2) {
+        // HAVE_CURRENT_DATA
+        audioRef.current.currentTime = initialTime;
+        console.log("[Audio] After setting initial time:", {
+          currentTime: audioRef.current.currentTime,
+          readyState: audioRef.current.readyState,
         });
-        setIsTransitioning(false);
+        setCurrentTime(initialTime);
+
+        if (isTransitioning) {
+          // If we're transitioning between tracks, start playing immediately
+          audioRef.current.play().catch((err) => {
+            console.error("[Audio] Error playing audio:", err);
+            setIsPlaying(false);
+          });
+          setIsTransitioning(false);
+        }
+      } else {
+        // If not ready, wait for canplay event
+        const handleCanPlay = () => {
+          console.log("[Audio] Can play event fired, setting time now");
+          if (audioRef.current) {
+            audioRef.current.currentTime = initialTime;
+            setCurrentTime(initialTime);
+            if (isTransitioning) {
+              audioRef.current.play().catch((err) => {
+                console.error("[Audio] Error playing audio:", err);
+                setIsPlaying(false);
+              });
+              setIsTransitioning(false);
+            }
+            audioRef.current.removeEventListener("canplay", handleCanPlay);
+          }
+        };
+        audioRef.current.addEventListener("canplay", handleCanPlay);
       }
     }
   };
