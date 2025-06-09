@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 Running ESLint checks..."
+npm run lint
+
+# If the lint command fails, the push will be aborted
+if [ $? -ne 0 ]; then
+  echo "❌ ESLint checks failed. Please fix the errors before pushing."
+  exit 1
+fi
+
+echo "✅ ESLint checks passed!" 
