@@ -11,6 +11,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Share2, Check, Copy } from "lucide-react";
 import { createTimestamp } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ShareDialogProps {
   selectedDate: Date;
@@ -48,11 +53,16 @@ export function ShareDialog({
 
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title="Share" disabled={disabled}>
-          <Share2 className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" disabled={disabled}>
+              <Share2 className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Share</TooltipContent>
+      </Tooltip>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Share Archive</DialogTitle>

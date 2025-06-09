@@ -16,6 +16,12 @@ import { formatTime } from "@/lib/utils";
 import { ArchiveConfig } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
 import { ShareDialog } from "@/components/share-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface AudioPlayerProps {
   audioUrl: string | null;
@@ -198,143 +204,171 @@ export default function AudioPlayer({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4">
-      <div className="container mx-auto max-w-4xl">
-        <div className="flex flex-col gap-4">
-          {/* Mobile scrubber with times */}
-          <div className="sm:hidden flex flex-col gap-2">
-            <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
-            </div>
-            <Slider
-              value={[currentTime]}
-              max={duration}
-              step={1}
-              onValueChange={handleSeek}
-              className="w-full"
-            />
-          </div>
-
-          {/* Main controls row */}
-          <div className="flex items-center justify-between gap-2 sm:gap-2">
-            <div className="flex items-center gap-4 sm:gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => changeHour(-1)}
-                disabled={!archiveSelected || isTransitioning}
-                className="h-10 w-10 sm:h-9 sm:w-9"
-              >
-                <SkipBack className="h-5 w-5 sm:h-4 sm:w-4" />
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={togglePlayPause}
-                disabled={!audioUrl || isLoading}
-                className="h-10 w-10 sm:h-9 sm:w-9"
-              >
-                {isLoading ? (
-                  <div className="h-5 w-5 sm:h-4 sm:w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                ) : isPlaying ? (
-                  <Pause className="h-5 w-5 sm:h-4 sm:w-4" />
-                ) : (
-                  <Play className="h-5 w-5 sm:h-4 sm:w-4" />
-                )}
-              </Button>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => changeHour(1)}
-                disabled={!archiveSelected || isTransitioning}
-                className="h-10 w-10 sm:h-9 sm:w-9"
-              >
-                <SkipForward className="h-5 w-5 sm:h-4 sm:w-4" />
-              </Button>
-            </div>
-
-            {/* Desktop scrubber with times */}
-            <div className="hidden sm:flex flex-1 items-center gap-2 min-w-0">
-              <span className="text-sm text-gray-500 dark:text-gray-400 w-12 shrink-0">
-                {formatTime(currentTime)}
-              </span>
+    <TooltipProvider>
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4">
+        <div className="container mx-auto max-w-4xl">
+          <div className="flex flex-col gap-4">
+            {/* Mobile scrubber with times */}
+            <div className="sm:hidden flex flex-col gap-2">
+              <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400">
+                <span>{formatTime(currentTime)}</span>
+                <span>{formatTime(duration)}</span>
+              </div>
               <Slider
                 value={[currentTime]}
                 max={duration}
                 step={1}
                 onValueChange={handleSeek}
-                className="flex-1"
+                className="w-full"
               />
-              <span className="text-sm text-gray-500 dark:text-gray-400 w-12 shrink-0">
-                {formatTime(duration)}
-              </span>
             </div>
 
-            <div className="flex items-center gap-4 sm:gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleMute}
-                disabled={!audioUrl}
-                className="h-10 w-10 sm:h-9 sm:w-9"
-              >
-                {isMuted ? (
-                  <VolumeX className="h-5 w-5 sm:h-4 sm:w-4" />
-                ) : (
-                  <Volume2 className="h-5 w-5 sm:h-4 sm:w-4" />
+            {/* Main controls row */}
+            <div className="flex items-center justify-between gap-2 sm:gap-2">
+              <div className="flex items-center gap-4 sm:gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => changeHour(-1)}
+                      disabled={!archiveSelected || isTransitioning}
+                      className="h-10 w-10 sm:h-9 sm:w-9"
+                    >
+                      <SkipBack className="h-5 w-5 sm:h-4 sm:w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Previous hour</TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={togglePlayPause}
+                      disabled={!audioUrl || isLoading}
+                      className="h-10 w-10 sm:h-9 sm:w-9"
+                    >
+                      {isLoading ? (
+                        <div className="h-5 w-5 sm:h-4 sm:w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      ) : isPlaying ? (
+                        <Pause className="h-5 w-5 sm:h-4 sm:w-4" />
+                      ) : (
+                        <Play className="h-5 w-5 sm:h-4 sm:w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {isPlaying ? "Pause" : "Play"}
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => changeHour(1)}
+                      disabled={!archiveSelected || isTransitioning}
+                      className="h-10 w-10 sm:h-9 sm:w-9"
+                    >
+                      <SkipForward className="h-5 w-5 sm:h-4 sm:w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Next hour</TooltipContent>
+                </Tooltip>
+              </div>
+
+              {/* Desktop scrubber with times */}
+              <div className="hidden sm:flex flex-1 items-center gap-2 min-w-0">
+                <span className="text-sm text-gray-500 dark:text-gray-400 w-12 shrink-0">
+                  {formatTime(currentTime)}
+                </span>
+                <Slider
+                  value={[currentTime]}
+                  max={duration}
+                  step={1}
+                  onValueChange={handleSeek}
+                  className="flex-1"
+                />
+                <span className="text-sm text-gray-500 dark:text-gray-400 w-12 shrink-0">
+                  {formatTime(duration)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 sm:gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={toggleMute}
+                      disabled={!audioUrl}
+                      className="h-10 w-10 sm:h-9 sm:w-9"
+                    >
+                      {isMuted ? (
+                        <VolumeX className="h-5 w-5 sm:h-4 sm:w-4" />
+                      ) : (
+                        <Volume2 className="h-5 w-5 sm:h-4 sm:w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{isMuted ? "Unmute" : "Mute"}</TooltipContent>
+                </Tooltip>
+
+                {isAuthenticated && audioUrl && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleDownload}
+                        className="h-10 w-10 sm:h-9 sm:w-9"
+                      >
+                        <Download className="h-5 w-5 sm:h-4 sm:w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Download MP3</TooltipContent>
+                  </Tooltip>
                 )}
-              </Button>
 
-              {isAuthenticated && audioUrl && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleDownload}
-                  title="Download MP3"
-                  className="h-10 w-10 sm:h-9 sm:w-9"
-                >
-                  <Download className="h-5 w-5 sm:h-4 sm:w-4" />
-                </Button>
-              )}
-
-              <ShareDialog
-                selectedDate={selectedDate}
-                selectedHour={selectedHour}
-                currentTime={currentTime}
-                disabled={!audioUrl}
-              />
+                <ShareDialog
+                  selectedDate={selectedDate}
+                  selectedHour={selectedHour}
+                  currentTime={currentTime}
+                  disabled={!audioUrl}
+                />
+              </div>
             </div>
           </div>
+
+          {error && (
+            <div className="mt-2 text-sm text-red-500 dark:text-red-400">
+              {error}
+            </div>
+          )}
+
+          <audio
+            ref={audioRef}
+            src={audioUrl || undefined}
+            onTimeUpdate={() =>
+              audioRef.current && setCurrentTime(audioRef.current.currentTime)
+            }
+            onLoadedMetadata={handleLoadedMetadata}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onError={() => {
+              setError("Error loading audio file. Please try another archive.");
+              setIsLoading(false);
+              setIsPlaying(false);
+              setIsTransitioning(false);
+            }}
+            onLoadStart={() => setIsLoading(true)}
+            onEnded={handleAudioEnded}
+          />
         </div>
-
-        {error && (
-          <div className="mt-2 text-sm text-red-500 dark:text-red-400">
-            {error}
-          </div>
-        )}
-
-        <audio
-          ref={audioRef}
-          src={audioUrl || undefined}
-          onTimeUpdate={() =>
-            audioRef.current && setCurrentTime(audioRef.current.currentTime)
-          }
-          onLoadedMetadata={handleLoadedMetadata}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-          onError={() => {
-            setError("Error loading audio file. Please try another archive.");
-            setIsLoading(false);
-            setIsPlaying(false);
-            setIsTransitioning(false);
-          }}
-          onLoadStart={() => setIsLoading(true)}
-          onEnded={handleAudioEnded}
-        />
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
