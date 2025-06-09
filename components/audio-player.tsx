@@ -70,6 +70,50 @@ export default function AudioPlayer({
     }
   };
 
+  // Handle keyboard events
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle keyboard events if user is typing in an input
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      switch (e.code) {
+        case "Space":
+          e.preventDefault(); // Prevent page scroll
+          if (audioUrl && !isLoading) {
+            togglePlayPause();
+          }
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          if (audioRef.current && audioUrl) {
+            const newTime = Math.max(0, audioRef.current.currentTime - 5); // Skip back 5 seconds
+            audioRef.current.currentTime = newTime;
+            setCurrentTime(newTime);
+          }
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          if (audioRef.current && audioUrl) {
+            const newTime = Math.min(
+              audioRef.current.duration,
+              audioRef.current.currentTime + 5
+            ); // Skip forward 5 seconds
+            audioRef.current.currentTime = newTime;
+            setCurrentTime(newTime);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [audioUrl, isLoading, togglePlayPause]);
+
   // Handle mute toggle
   const toggleMute = () => {
     if (audioRef.current) {
