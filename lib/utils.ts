@@ -36,10 +36,11 @@ export function formatTime(seconds: number): string {
 /**
  * Get a human-readable label for an hour (0-23)
  */
-export function getHourLabel(hour: number): string {
+export function getHourLabel(hour: number, minutes: number = 0): string {
   const period = hour >= 12 ? "PM" : "AM";
   const displayHour = hour % 12 || 12;
-  return `${displayHour}:00 ${period}`;
+  const minutesStr = minutes.toString().padStart(2, "0");
+  return `${displayHour}:${minutesStr} ${period}`;
 }
 
 /**

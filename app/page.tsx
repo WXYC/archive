@@ -119,6 +119,7 @@ function ArchivePageContent() {
   );
   const [userDismissed, setUserDismissed] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0);
 
   // Effect to check if the initial timestamp is out of range
   useEffect(() => {
@@ -327,7 +328,10 @@ function ArchivePageContent() {
                 </h3>
                 <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
                   {formatDate(selectedDate)} at{" "}
-                  {getHourLabel(Number.parseInt(selectedHour))}
+                  {getHourLabel(
+                    Number.parseInt(selectedHour),
+                    Math.min(59, Math.floor(currentPlaybackTime / 60))
+                  )}
                 </p>
                 <Button
                   className="w-full mt-4 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
@@ -365,6 +369,7 @@ function ArchivePageContent() {
         onTimeUpdate={(minute: number, second: number) => {
           setSelectedMinute(minute.toString());
           setSelectedSecond(second.toString());
+          setCurrentPlaybackTime(minute * 60 + second);
         }}
         config={selectedConfig}
       />

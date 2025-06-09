@@ -12,7 +12,7 @@ import {
   SkipForward,
   Download,
 } from "lucide-react";
-import { formatTime } from "@/lib/utils";
+import { formatTime, getHourLabel } from "@/lib/utils";
 import { ArchiveConfig } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
 import { ShareDialog } from "@/components/share-dialog";
@@ -47,6 +47,7 @@ export default function AudioPlayer({
   selectedSecond,
   archiveSelected,
   onHourChange,
+  onTimeUpdate,
   config,
 }: AudioPlayerProps) {
   const { isAuthenticated } = useAuth();
@@ -396,9 +397,16 @@ export default function AudioPlayer({
           <audio
             ref={audioRef}
             src={audioUrl || undefined}
-            onTimeUpdate={() =>
-              audioRef.current && setCurrentTime(audioRef.current.currentTime)
-            }
+            onTimeUpdate={() => {
+              if (audioRef.current) {
+                const currentTime = audioRef.current.currentTime;
+                setCurrentTime(currentTime);
+                onTimeUpdate(
+                  Math.floor(currentTime / 60),
+                  Math.floor(currentTime % 60)
+                );
+              }
+            }}
             onLoadedMetadata={handleLoadedMetadata}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
