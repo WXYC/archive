@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { formatDate, getArchiveUrl, getHourLabel } from "@/lib/utils";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Play, Pause } from "lucide-react";
 import AudioPlayer from "@/components/audio-player";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -197,6 +197,10 @@ function ArchivePageContent() {
   }, [selectedDate, selectedHour, archiveSelected, isAuthenticated, timestamp]);
 
   const handlePlay = () => {
+    if (isPlaying) {
+      setIsPlaying(false);
+      return;
+    }
     setArchiveSelected(true);
     setIsPlaying(true);
   };
@@ -333,7 +337,17 @@ function ArchivePageContent() {
                   className="w-full mt-4 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
                   onClick={handlePlay}
                 >
-                  Listen Now
+                  {isPlaying ? (
+                    <>
+                      <Pause className="h-4 w-4 mr-2" />
+                      Pause
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      Play
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
