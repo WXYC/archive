@@ -47,6 +47,7 @@ export default function AudioPlayer({
   selectedSecond,
   archiveSelected,
   onHourChange,
+  onTimeUpdate,
   config,
 }: AudioPlayerProps) {
   const { isAuthenticated } = useAuth();
@@ -267,6 +268,11 @@ export default function AudioPlayer({
           readyState: audioRef.current.readyState,
         });
         setCurrentTime(initialTime);
+        // Update the time display
+        onTimeUpdate(
+          Math.floor(initialTime / 60),
+          Math.floor(initialTime % 60)
+        );
 
         if (isTransitioning) {
           // If we're transitioning between tracks, start playing immediately
@@ -283,6 +289,11 @@ export default function AudioPlayer({
           if (audioRef.current) {
             audioRef.current.currentTime = initialTime;
             setCurrentTime(initialTime);
+            // Update the time display
+            onTimeUpdate(
+              Math.floor(initialTime / 60),
+              Math.floor(initialTime % 60)
+            );
 
             if (isTransitioning) {
               audioRef.current.play().catch((err) => {
@@ -457,6 +468,11 @@ export default function AudioPlayer({
               if (audioRef.current) {
                 const currentTime = audioRef.current.currentTime;
                 setCurrentTime(currentTime);
+                // Update the time display during playback
+                onTimeUpdate(
+                  Math.floor(currentTime / 60),
+                  Math.floor(currentTime % 60)
+                );
               }
             }}
             onLoadedMetadata={handleLoadedMetadata}
