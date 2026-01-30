@@ -4,8 +4,9 @@ import { NextResponse } from "next/server";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { archiveConfigs, getDateRange } from "@/config/archive";
+import { verifyAuthHeader } from "@/lib/jwt-utils";
+import { isDJRole } from "@wxyc/shared/auth-client";
 
-// Try creating the client with explicit error handling
 let s3Client: S3Client | null = null;
 try {
   s3Client = new S3Client({
@@ -20,7 +21,7 @@ try {
 }
 
 export async function POST(request: Request) {
-  const { key, isAuthenticated = false } = await request.json();
+  const { key } = await request.json();
 
   if (!key) {
     return NextResponse.json({ error: "Key is required" }, { status: 400 });
@@ -53,8 +54,16 @@ export async function POST(request: Request) {
     parseInt(hour)
   );
 
+  // Verify JWT from Authorization header to determine access level
+  const authHeader = request.headers.get("Authorization");
+  const verifyResult = await verifyAuthHeader(authHeader);
+
+  // Determine if user has DJ-level access
+  const hasDJAccess =
+    verifyResult.authenticated && isDJRole(verifyResult.role);
+
   // Get appropriate date range based on authentication
-  const config = isAuthenticated ? archiveConfigs.dj : archiveConfigs.default;
+  const config = hasDJAccess ? archiveConfigs.dj : archiveConfigs.default;
   const { today, startDate } = getDateRange(config);
 
   // Check if the requested file is within the allowed date range
@@ -74,7 +83,7 @@ export async function POST(request: Request) {
 
     const signedUrl = await getSignedUrl(s3Client, command, {
       expiresIn: 3600,
-    }); // URL expires in 1 hour
+    });
     return NextResponse.json({ url: signedUrl });
   } catch (error) {
     console.error("Error generating signed URL:", error);

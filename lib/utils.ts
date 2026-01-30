@@ -49,7 +49,7 @@ export function getHourLabel(hour: number, minutes: number = 0): string {
 export async function getArchiveUrl(
   date: Date,
   hour: number,
-  isAuthenticated: boolean
+  token: string | null
 ): Promise<string> {
   const year = date.getFullYear();
   const month = (date.getMonth() + 1).toString().padStart(2, "0");
@@ -58,14 +58,16 @@ export async function getArchiveUrl(
 
   const key = `${year}/${month}/${day}/${year}${month}${day}${hourStr}00.mp3`;
 
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   try {
     const response = await fetch("/api/signed-url", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        key,
-        ...(isAuthenticated && { isAuthenticated: true }),
-      }),
+      headers,
+      body: JSON.stringify({ key }),
     });
 
     const data = await response.json();

@@ -35,7 +35,7 @@ import { useAuth } from "@/lib/auth";
 function ArchivePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, getToken } = useAuth();
 
   // Use dj config if authenticated, otherwise use default
   const selectedConfig = isAuthenticated ? archiveConfigs.dj : defaultConfig;
@@ -177,10 +177,11 @@ function ArchivePageContent() {
     async function updateAudioUrl() {
       if (selectedDate && selectedHour && archiveSelected) {
         try {
+          const token = await getToken();
           const url = await getArchiveUrl(
             selectedDate,
             Number.parseInt(selectedHour),
-            isAuthenticated
+            token
           );
           setAudioUrl(url);
         } catch (error) {
@@ -191,7 +192,7 @@ function ArchivePageContent() {
     }
 
     updateAudioUrl();
-  }, [selectedDate, selectedHour, archiveSelected, isAuthenticated]);
+  }, [selectedDate, selectedHour, archiveSelected, getToken]);
 
   const handlePlay = () => {
     if (isPlaying) {
