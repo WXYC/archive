@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { PostHogAuthSync } from "../PostHogAuthSync";
 
 // Mock PostHog
@@ -14,8 +13,6 @@ vi.mock("posthog-js/react", () => ({
 // Mock auth - we'll control these values in tests
 let mockIsAuthenticated = false;
 let mockIsLoading = true;
-let mockLogin: () => void = () => {};
-let mockLogout: () => void = () => {};
 
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
@@ -24,17 +21,6 @@ vi.mock("@/lib/auth", () => ({
   }),
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
-
-// Test wrapper that allows controlling auth state
-function createTestComponent() {
-  let setAuth: (auth: { isAuthenticated: boolean; isLoading: boolean }) => void;
-
-  function TestWrapper() {
-    return <PostHogAuthSync />;
-  }
-
-  return { TestWrapper };
-}
 
 describe("PostHogAuthSync", () => {
   beforeEach(() => {
