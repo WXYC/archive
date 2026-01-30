@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/lib/auth";
 import { PostHogProvider } from "@/components/PostHogProvider";
+import { PostHogAuthSync } from "@/components/PostHogAuthSync";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -28,6 +29,7 @@ export default function RootLayout({
             disableTransitionOnChange
           >
             <AuthProvider>
+              <PostHogAuthSync />
               <main className="min-h-screen bg-gradient-to-b from-purple-50 to-white dark:from-gray-900 dark:to-gray-800">
                 {children}
               </main>
