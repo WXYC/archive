@@ -19,8 +19,10 @@ vi.mock("@aws-sdk/s3-request-presigner", () => ({
 }));
 
 vi.mock("@aws-sdk/client-s3", () => ({
-  S3Client: vi.fn().mockImplementation(() => ({})),
-  GetObjectCommand: vi.fn().mockImplementation((params) => params),
+  S3Client: class MockS3Client {},
+  GetObjectCommand: class MockGetObjectCommand {
+    constructor(public params: unknown) {}
+  },
 }));
 
 // Mock archive configs
