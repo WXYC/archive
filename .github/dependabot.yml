@@ -10,3 +10,9 @@ updates:
         dependency-type: "development"
       production-dependencies:
         dependency-type: "production"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"

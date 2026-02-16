@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WXYC Archive
 
-## Getting Started
+A Next.js app for browsing and streaming archived WXYC recordings. Deployed to Cloudflare Workers via [OpenNext](https://opennext.js.org/cloudflare).
 
-First, run the development server:
+## Local Development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env    # fill in values as needed
+npm install
+npm run dev              # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Testing
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test                 # unit tests (Vitest)
+npm run test:watch       # unit tests in watch mode
+npm run test:e2e         # end-to-end tests (Playwright)
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Deployment
 
-## Learn More
+Deployment is handled by the GitHub Actions workflow in `.github/workflows/deploy.yml`.
 
-To learn more about Next.js, take a look at the following resources:
+### How it works
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Pull requests** run the `build` job to verify the OpenNext/Cloudflare Workers build succeeds.
+- **Pushes to `main`** run `build`, then `deploy` which uses Wrangler to deploy the built output to Cloudflare Workers.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Required GitHub configuration
 
-## Deploy on Vercel
+**Repository secrets** (Settings > Secrets and variables > Actions > Secrets):
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Secret | Description |
+|--------|-------------|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token with Workers permissions |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Repository variables** (Settings > Secrets and variables > Actions > Variables):
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_BETTER_AUTH_URL` | Public auth URL (baked into client bundle) |
+| `BETTER_AUTH_URL` | Server-side auth URL |
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog project API key |
+| `NEXT_PUBLIC_POSTHOG_HOST` | PostHog ingest host |
+
+### Runtime secrets
+
+These are set directly on the Cloudflare Worker (via `wrangler secret put` or the dashboard), not in GitHub:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `BETTER_AUTH_JWKS_URL`
