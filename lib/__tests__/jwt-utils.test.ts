@@ -29,7 +29,8 @@ describe("jwt-utils", () => {
       vi.mocked(jose.jwtVerify).mockResolvedValue({
         payload: mockPayload,
         protectedHeader: { alg: "RS256" },
-      } as jose.JWTVerifyResult & jose.ResolvedKey);
+        key: new Uint8Array(),
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
 
       const result = await verifyToken("valid-token");
 
@@ -42,7 +43,7 @@ describe("jwt-utils", () => {
 
     it("should return authenticated false for expired token", async () => {
       vi.mocked(jose.jwtVerify).mockRejectedValue(
-        new jose.errors.JWTExpired("Token expired")
+        new jose.errors.JWTExpired("Token expired", {})
       );
 
       const result = await verifyToken("expired-token");
@@ -68,7 +69,7 @@ describe("jwt-utils", () => {
 
     it("should return authenticated false for claim validation failure", async () => {
       vi.mocked(jose.jwtVerify).mockRejectedValue(
-        new jose.errors.JWTClaimValidationFailed("Claim validation failed")
+        new jose.errors.JWTClaimValidationFailed("Claim validation failed", {})
       );
 
       const result = await verifyToken("invalid-claims-token");
@@ -88,7 +89,8 @@ describe("jwt-utils", () => {
       vi.mocked(jose.jwtVerify).mockResolvedValue({
         payload: mockPayload,
         protectedHeader: { alg: "RS256" },
-      } as jose.JWTVerifyResult & jose.ResolvedKey);
+        key: new Uint8Array(),
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
 
       const result = await verifyToken("valid-token-no-role");
 
@@ -137,7 +139,8 @@ describe("jwt-utils", () => {
       vi.mocked(jose.jwtVerify).mockResolvedValue({
         payload: mockPayload,
         protectedHeader: { alg: "RS256" },
-      } as jose.JWTVerifyResult & jose.ResolvedKey);
+        key: new Uint8Array(),
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
 
       const result = await verifyAuthHeader("Bearer valid-token");
 
