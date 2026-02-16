@@ -24,8 +24,8 @@ Deployment is handled by the GitHub Actions workflow in `.github/workflows/deplo
 
 ### How it works
 
-- **Pull requests** run the `build` job to verify the OpenNext/Cloudflare Workers build succeeds.
-- **Pushes to `main`** run `build`, then `deploy` which uses Wrangler to deploy the built output to Cloudflare Workers.
+- **Pull requests** run `test` (type check + unit tests) and `build-and-deploy` (OpenNext build) to verify everything works.
+- **Pushes to `main`** additionally deploy the built output to Cloudflare Workers via Wrangler.
 
 ### Required GitHub configuration
 
@@ -52,3 +52,5 @@ These are set directly on the Cloudflare Worker (via `wrangler secret put` or th
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 - `BETTER_AUTH_JWKS_URL`
+- `BETTER_AUTH_ISSUER`
+- `BETTER_AUTH_AUDIENCE`
