@@ -11,10 +11,10 @@ import {
 import {
   authClient,
   getJWTToken,
-  isDJRole,
-  DJ_ROLES,
+  Authorization,
+  roleToAuthorization,
 } from "@wxyc/shared/auth-client";
-import type { Session } from "@wxyc/shared/auth-client";
+import type { Session, WXYCRole } from "@wxyc/shared/auth-client";
 import { decodeJwt } from "jose";
 import { resolveEmail, sendVerificationOtp, signInWithOtp } from "./otp";
 
@@ -28,7 +28,7 @@ type User = {
   name: string;
   email: string;
   image?: string | null;
-  role?: string;
+  role?: WXYCRole;
 };
 
 /**
@@ -54,9 +54,10 @@ type SendCodeResult =
 type AuthContextType = {
   isLoading: boolean;
   isAuthenticated: boolean;
+  authorization: Authorization;
   session: Session | null;
   user: User | null;
-  userRole: string | null;
+  userRole: WXYCRole | null;
   login: (usernameOrEmail: string, password: string) => Promise<LoginResult>;
   sendLoginCode: (identifier: string) => Promise<SendCodeResult>;
   verifyLoginCode: (email: string, otp: string) => Promise<LoginResult>;
@@ -73,7 +74,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export { DJ_ROLES, isDJRole };
+export { Authorization };
 
 /**
  * The shared archive account, retired 2026-09-12 along with the build-time
@@ -180,7 +181,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     expiresAt: number | null;
   } | null>(null);
 
-  const isAuthenticated = isDJRole(stationRole);
+  // Ranked rather than set-membership: an elevated alias ("admin", "owner")
+  // ranks at stationManager and therefore clears the DJ bar, which isDJRole
+  // refused. The rank is taken from the JWT station role — never from
+  // session.user.role, which is the better-auth admin-plugin field and is null
+  // for a plain dj. Gating on that field is what locked every DJ out in #100.
+  const authorization = roleToAuthorization(stationRole);
+  const isAuthenticated = authorization >= Authorization.DJ;
 
   // Resolve the station role, then sync both the gating state and the token
   // cache. Returns the result so callers can distinguish "not a DJ" from
@@ -255,7 +262,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
-      if (!isDJRole(roleResult.role)) {
+      if (roleToAuthorization(roleResult.role) < Authorization.DJ) {
         return {
           success: false,
           error: "Your account does not have archive access",
@@ -393,6 +400,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         isLoading,
         isAuthenticated,
+        authorization,
         session,
         user,
         userRole: stationRole,

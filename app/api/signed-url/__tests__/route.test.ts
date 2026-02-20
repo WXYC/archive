@@ -6,10 +6,24 @@ vi.mock("@/lib/jwt-utils", () => ({
   verifyAuthHeader: (header: string | null) => mockVerifyAuthHeader(header),
 }));
 
-// Mock isDJRole
-vi.mock("@wxyc/shared/auth-client", () => ({
-  isDJRole: (role: string | null | undefined) =>
-    ["dj", "musicDirector", "stationManager"].includes(role as string),
+// Mock roleToAuthorization and Authorization
+vi.mock("@wxyc/shared/auth-client/auth", () => ({
+  Authorization: { NO: 0, DJ: 1, MD: 2, SM: 3, ADMIN: 4 },
+  roleToAuthorization: (role: string | null | undefined) => {
+    if (!role) return 0;
+    switch (role) {
+      case "admin":
+        return 4;
+      case "stationManager":
+        return 3;
+      case "musicDirector":
+        return 2;
+      case "dj":
+        return 1;
+      default:
+        return 0;
+    }
+  },
 }));
 
 // Mock S3 client
@@ -193,6 +207,28 @@ describe("POST /api/signed-url", () => {
         authenticated: true,
         payload: { sub: "user-1", role: "stationManager" },
         role: "stationManager",
+      });
+
+      const date = new Date();
+      date.setDate(date.getDate() - 60);
+      const year = date.getFullYear();
+      const month = (date.getMonth() + 1).toString().padStart(2, "0");
+      const day = date.getDate().toString().padStart(2, "0");
+      const key = `${year}/${month}/${day}/${year}${month}${day}1200.mp3`;
+
+      const response = await callRoute(
+        { key },
+        "Bearer valid-jwt-token"
+      );
+
+      expect(response.status).toBe(200);
+    });
+
+    it("should allow admin role extended access", async () => {
+      mockVerifyAuthHeader.mockResolvedValue({
+        authenticated: true,
+        payload: { sub: "admin-1", role: "admin" },
+        role: "admin",
       });
 
       const date = new Date();
