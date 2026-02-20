@@ -3,7 +3,7 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { archiveConfigs, getDateRange } from "@/config/archive";
 import { verifyAuthHeader } from "@/lib/jwt-utils";
-import { isDJRole } from "@wxyc/shared/auth-client";
+import { roleToAuthorization, Authorization } from "@wxyc/shared/auth-client/auth";
 
 let s3Client: S3Client | null = null;
 try {
@@ -57,7 +57,13 @@ export async function POST(request: Request) {
   // organization member table), not the admin-plugin `user.role`.
   const authHeader = request.headers.get("Authorization");
   const verifyResult = await verifyAuthHeader(authHeader);
-  const hasDJAccess = verifyResult.authenticated && isDJRole(verifyResult.role);
+  // Compared as an ordered rank rather than a set membership test: the claim
+  // can legitimately arrive as an elevated alias ("admin", "owner"), which
+  // ranks at stationManager and so clears the DJ bar. isDJRole matches the
+  // three canonical names exactly and would refuse those.
+  const hasDJAccess =
+    verifyResult.authenticated &&
+    roleToAuthorization(verifyResult.role) >= Authorization.DJ;
 
   // Get appropriate date range based on authentication
   const config = hasDJAccess ? archiveConfigs.dj : archiveConfigs.default;
