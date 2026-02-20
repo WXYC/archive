@@ -3,7 +3,7 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { archiveConfigs, getDateRange } from "@/config/archive";
 import { verifyAuthHeader } from "@/lib/jwt-utils";
-import { isDJRole } from "@wxyc/shared/auth-client";
+import { roleToAuthorization, Authorization } from "@wxyc/shared/auth-client/auth";
 
 let s3Client: S3Client | null = null;
 try {
@@ -58,7 +58,8 @@ export async function POST(request: Request) {
 
   // Determine if user has DJ-level access
   const hasDJAccess =
-    verifyResult.authenticated && isDJRole(verifyResult.role);
+    verifyResult.authenticated &&
+    roleToAuthorization(verifyResult.role) >= Authorization.DJ;
 
   // Get appropriate date range based on authentication
   const config = hasDJAccess ? archiveConfigs.dj : archiveConfigs.default;

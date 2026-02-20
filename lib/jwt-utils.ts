@@ -1,4 +1,5 @@
 import * as jose from "jose";
+import type { WXYCRole } from "@wxyc/shared/auth-client/auth";
 
 const JWKS_URL =
   process.env.BETTER_AUTH_JWKS_URL || "https://api.wxyc.org/auth/jwks";
@@ -12,9 +13,33 @@ function getJWKS(): jose.JWTVerifyGetKey {
   return jwks;
 }
 
+// Warn once if issuer/audience env vars are missing. Soft degradation is
+// intentional: the archive is a consumer-facing Next.js site, not the
+// authoritative API server that Backend-Service is. In development these
+// vars are commonly omitted, so we warn rather than throw.
+let warnedMissingClaimVars = false;
+
+function getVerifyOptions(): jose.JWTVerifyOptions {
+  const issuer = process.env.BETTER_AUTH_ISSUER || undefined;
+  const audience = process.env.BETTER_AUTH_AUDIENCE || undefined;
+
+  if (!warnedMissingClaimVars && (!issuer || !audience)) {
+    console.warn(
+      "JWT claim validation env vars missing (BETTER_AUTH_ISSUER and/or BETTER_AUTH_AUDIENCE). " +
+        "Tokens will be verified by signature only. Set these in production."
+    );
+    warnedMissingClaimVars = true;
+  }
+
+  const options: jose.JWTVerifyOptions = {};
+  if (issuer) options.issuer = issuer;
+  if (audience) options.audience = audience;
+  return options;
+}
+
 export type JWTPayload = {
   sub: string;
-  role?: string;
+  role?: WXYCRole;
   email?: string;
   name?: string;
   iat?: number;
@@ -22,20 +47,25 @@ export type JWTPayload = {
 };
 
 export type VerifyResult =
-  | { authenticated: true; payload: JWTPayload; role: string | null }
+  | { authenticated: true; payload: JWTPayload; role: WXYCRole | null }
   | { authenticated: false; error: string };
 
 /**
  * Verify a JWT token using the JWKS from the auth server.
+ *
+ * Validates issuer and audience claims when the corresponding env vars
+ * (BETTER_AUTH_ISSUER, BETTER_AUTH_AUDIENCE) are set. Logs a warning on
+ * the first call if either is missing.
  */
 export async function verifyToken(token: string): Promise<VerifyResult> {
   try {
-    const { payload } = await jose.jwtVerify(token, getJWKS());
+    const options = getVerifyOptions();
+    const { payload } = await jose.jwtVerify(token, getJWKS(), options);
 
     return {
       authenticated: true,
       payload: payload as JWTPayload,
-      role: (payload.role as string) ?? null,
+      role: (payload.role as WXYCRole) ?? null,
     };
   } catch (error) {
     if (error instanceof jose.errors.JWTExpired) {

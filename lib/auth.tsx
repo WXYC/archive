@@ -10,10 +10,10 @@ import {
 import {
   authClient,
   getJWTToken,
-  isDJRole,
-  DJ_ROLES,
+  Authorization,
+  roleToAuthorization,
 } from "@wxyc/shared/auth-client";
-import type { Session } from "@wxyc/shared/auth-client";
+import type { Session, WXYCRole } from "@wxyc/shared/auth-client";
 
 // Extended user type with custom role field
 type User = {
@@ -21,7 +21,7 @@ type User = {
   name: string;
   email: string;
   image?: string | null;
-  role?: string;
+  role?: WXYCRole;
 };
 
 type LoginResult = { success: true } | { success: false; error: string };
@@ -29,9 +29,10 @@ type LoginResult = { success: true } | { success: false; error: string };
 type AuthContextType = {
   isLoading: boolean;
   isAuthenticated: boolean;
+  authorization: Authorization;
   session: Session | null;
   user: User | null;
-  userRole: string | null;
+  userRole: WXYCRole | null;
   login: (usernameOrEmail: string, password: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   getToken: () => Promise<string | null>;
@@ -39,7 +40,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export { DJ_ROLES, isDJRole };
+export { Authorization };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -47,7 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
 
   const userRole = user?.role ?? null;
-  const isAuthenticated = isDJRole(userRole);
+  const authorization = roleToAuthorization(userRole);
+  const isAuthenticated = authorization >= Authorization.DJ;
 
   // Check session on mount
   useEffect(() => {
@@ -96,8 +98,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userData = sessionResult.data.user as User;
           setUser(userData);
 
-          // Check if user has DJ role
-          if (!isDJRole(userData.role)) {
+          // Check if user has DJ-level access
+          if (roleToAuthorization(userData.role) < Authorization.DJ) {
             return {
               success: false,
               error: "Your account does not have archive access",
@@ -140,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         isLoading,
         isAuthenticated,
+        authorization,
         session,
         user,
         userRole,

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AuthProvider, useAuth, isDJRole, DJ_ROLES } from "../auth";
+import { AuthProvider, useAuth, Authorization } from "../auth";
 
 // Mock the auth client module
 const mockGetSession = vi.fn();
@@ -22,9 +22,22 @@ vi.mock("@wxyc/shared/auth-client", () => ({
     signOut: () => mockSignOut(),
   },
   getJWTToken: () => mockGetJWTToken(),
-  isDJRole: (role: string | null | undefined) =>
-    ["dj", "musicDirector", "stationManager"].includes(role as string),
-  DJ_ROLES: ["dj", "musicDirector", "stationManager"],
+  Authorization: { NO: 0, DJ: 1, MD: 2, SM: 3, ADMIN: 4 },
+  roleToAuthorization: (role: string | null | undefined) => {
+    if (!role) return 0;
+    switch (role) {
+      case "admin":
+        return 4;
+      case "stationManager":
+        return 3;
+      case "musicDirector":
+        return 2;
+      case "dj":
+        return 1;
+      default:
+        return 0;
+    }
+  },
 }));
 
 // Test component that uses the auth hook
@@ -34,6 +47,7 @@ function TestComponent() {
     isAuthenticated,
     user,
     userRole,
+    authorization,
     login,
     logout,
     getToken,
@@ -47,6 +61,7 @@ function TestComponent() {
       </div>
       <div data-testid="user-name">{user?.name ?? "no-user"}</div>
       <div data-testid="user-role">{userRole ?? "no-role"}</div>
+      <div data-testid="authorization">{authorization}</div>
       <button
         onClick={async () => {
           const result = await login("testuser", "password");
@@ -148,6 +163,62 @@ describe("AuthProvider", () => {
         expect(screen.getByTestId("authenticated").textContent).toBe(
           "not-authenticated"
         );
+      });
+    });
+
+    it("should expose authorization level for dj role", async () => {
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: { id: "session-1" },
+          user: { id: "user-1", name: "Test DJ", role: "dj" },
+        },
+      });
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("authorization").textContent).toBe("1");
+      });
+    });
+
+    it("should expose authorization 0 for unauthenticated user", async () => {
+      mockGetSession.mockResolvedValue({ data: null });
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+        expect(screen.getByTestId("authorization").textContent).toBe("0");
+      });
+    });
+
+    it("should authenticate admin role users", async () => {
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: { id: "session-1" },
+          user: { id: "admin-1", name: "Admin", role: "admin" },
+        },
+      });
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("authenticated").textContent).toBe(
+          "authenticated"
+        );
+        expect(screen.getByTestId("authorization").textContent).toBe("4");
       });
     });
   });
@@ -352,37 +423,5 @@ describe("AuthProvider", () => {
         expect(document.body.getAttribute("data-token")).toBe("jwt-token-123");
       });
     });
-  });
-});
-
-describe("isDJRole", () => {
-  it("should return true for dj role", () => {
-    expect(isDJRole("dj")).toBe(true);
-  });
-
-  it("should return true for musicDirector role", () => {
-    expect(isDJRole("musicDirector")).toBe(true);
-  });
-
-  it("should return true for stationManager role", () => {
-    expect(isDJRole("stationManager")).toBe(true);
-  });
-
-  it("should return false for member role", () => {
-    expect(isDJRole("member")).toBe(false);
-  });
-
-  it("should return false for null", () => {
-    expect(isDJRole(null)).toBe(false);
-  });
-
-  it("should return false for undefined", () => {
-    expect(isDJRole(undefined)).toBe(false);
-  });
-});
-
-describe("DJ_ROLES", () => {
-  it("should contain expected roles", () => {
-    expect(DJ_ROLES).toEqual(["dj", "musicDirector", "stationManager"]);
   });
 });

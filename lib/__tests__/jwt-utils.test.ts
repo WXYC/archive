@@ -15,6 +15,8 @@ vi.mock("jose", async () => {
 describe("jwt-utils", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("BETTER_AUTH_ISSUER", "https://api.wxyc.org");
+    vi.stubEnv("BETTER_AUTH_AUDIENCE", "https://api.wxyc.org");
   });
 
   describe("verifyToken", () => {
@@ -29,7 +31,7 @@ describe("jwt-utils", () => {
       vi.mocked(jose.jwtVerify).mockResolvedValue({
         payload: mockPayload,
         protectedHeader: { alg: "RS256" },
-      } as jose.JWTVerifyResult & jose.ResolvedKey);
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
 
       const result = await verifyToken("valid-token");
 
@@ -42,7 +44,7 @@ describe("jwt-utils", () => {
 
     it("should return authenticated false for expired token", async () => {
       vi.mocked(jose.jwtVerify).mockRejectedValue(
-        new jose.errors.JWTExpired("Token expired")
+        new jose.errors.JWTExpired("Token expired", {} as jose.JWTPayload)
       );
 
       const result = await verifyToken("expired-token");
@@ -68,7 +70,7 @@ describe("jwt-utils", () => {
 
     it("should return authenticated false for claim validation failure", async () => {
       vi.mocked(jose.jwtVerify).mockRejectedValue(
-        new jose.errors.JWTClaimValidationFailed("Claim validation failed")
+        new jose.errors.JWTClaimValidationFailed("Claim validation failed", {} as jose.JWTPayload)
       );
 
       const result = await verifyToken("invalid-claims-token");
@@ -88,7 +90,7 @@ describe("jwt-utils", () => {
       vi.mocked(jose.jwtVerify).mockResolvedValue({
         payload: mockPayload,
         protectedHeader: { alg: "RS256" },
-      } as jose.JWTVerifyResult & jose.ResolvedKey);
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
 
       const result = await verifyToken("valid-token-no-role");
 
@@ -97,6 +99,62 @@ describe("jwt-utils", () => {
         payload: mockPayload,
         role: null,
       });
+    });
+
+    it("should pass issuer and audience options to jwtVerify", async () => {
+      vi.mocked(jose.jwtVerify).mockResolvedValue({
+        payload: { sub: "user-123", role: "dj" },
+        protectedHeader: { alg: "RS256" },
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
+
+      await verifyToken("valid-token");
+
+      const callArgs = vi.mocked(jose.jwtVerify).mock.calls[0];
+      expect(callArgs[0]).toBe("valid-token");
+      expect(callArgs[2]).toEqual(
+        expect.objectContaining({
+          issuer: "https://api.wxyc.org",
+          audience: "https://api.wxyc.org",
+        })
+      );
+    });
+
+    it("should allow admin role", async () => {
+      const mockPayload = {
+        sub: "admin-1",
+        role: "admin",
+        email: "admin@wxyc.org",
+      };
+
+      vi.mocked(jose.jwtVerify).mockResolvedValue({
+        payload: mockPayload,
+        protectedHeader: { alg: "RS256" },
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
+
+      const result = await verifyToken("admin-token");
+
+      expect(result).toEqual({
+        authenticated: true,
+        payload: mockPayload,
+        role: "admin",
+      });
+    });
+
+    it("should omit issuer and audience when env vars are not set", async () => {
+      vi.stubEnv("BETTER_AUTH_ISSUER", "");
+      vi.stubEnv("BETTER_AUTH_AUDIENCE", "");
+
+      vi.mocked(jose.jwtVerify).mockResolvedValue({
+        payload: { sub: "user-123", role: "dj" },
+        protectedHeader: { alg: "RS256" },
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
+
+      await verifyToken("valid-token");
+
+      const callArgs = vi.mocked(jose.jwtVerify).mock.calls[0];
+      const options = callArgs[2] as Record<string, unknown> | undefined;
+      expect(options?.issuer).toBeUndefined();
+      expect(options?.audience).toBeUndefined();
     });
   });
 
@@ -137,7 +195,7 @@ describe("jwt-utils", () => {
       vi.mocked(jose.jwtVerify).mockResolvedValue({
         payload: mockPayload,
         protectedHeader: { alg: "RS256" },
-      } as jose.JWTVerifyResult & jose.ResolvedKey);
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
 
       const result = await verifyAuthHeader("Bearer valid-token");
 
