@@ -1,6 +1,7 @@
 "use client";
 
-import { Music, Info } from "lucide-react";
+import { Music, Info, ExternalLink } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Popover,
   PopoverContent,
@@ -33,7 +34,9 @@ export function PlaylistItem({ entry, isActive, onClick }: PlaylistItemProps) {
     >
       {/* Album art thumbnail */}
       <div className="flex-shrink-0 w-12 h-12 rounded bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-        {entry.artworkUrl ? (
+        {entry.artworkLoading ? (
+          <Skeleton className="w-full h-full" />
+        ) : entry.artworkUrl ? (
           <img
             src={entry.artworkUrl}
             alt={`${entry.releaseTitle} artwork`}
@@ -73,34 +76,76 @@ export function PlaylistItem({ entry, isActive, onClick }: PlaylistItemProps) {
             <Info className="h-4 w-4 text-gray-400" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-64" side="left" align="start">
+        <PopoverContent className="w-72" side="left" align="start">
           <div className="space-y-2">
             <h4 className="font-medium text-sm">Track Info</h4>
             {entry.releaseTitle && (
               <div>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Album
-                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Album</span>
                 <p className="text-sm">{entry.releaseTitle}</p>
               </div>
             )}
             {entry.labelName && (
               <div>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  Label
-                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Label</span>
                 <p className="text-sm">{entry.labelName}</p>
               </div>
             )}
-            {entry.rotation && (
-              <span className="inline-block text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded">
-                Rotation
-              </span>
+            {entry.metadata?.genre && (
+              <div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Genre</span>
+                <p className="text-sm">{entry.metadata.genre}</p>
+              </div>
             )}
-            {entry.request && (
-              <span className="inline-block text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded ml-1">
-                Request
-              </span>
+            {entry.metadata?.format && (
+              <div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Format</span>
+                <p className="text-sm">{entry.metadata.format}</p>
+              </div>
+            )}
+            {entry.metadata?.callNumber && (
+              <div>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Call Number</span>
+                <p className="text-sm font-mono">{entry.metadata.callNumber}</p>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1 pt-1">
+              {entry.rotation && (
+                <span className="inline-block text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded">
+                  Rotation
+                </span>
+              )}
+              {entry.request && (
+                <span className="inline-block text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded">
+                  Request
+                </span>
+              )}
+            </div>
+            {(entry.metadata?.discogsUrl || entry.metadata?.libraryUrl) && (
+              <div className="flex gap-2 pt-1 border-t dark:border-gray-700">
+                {entry.metadata?.discogsUrl && (
+                  <a
+                    href={entry.metadata.discogsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Discogs <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+                {entry.metadata?.libraryUrl && (
+                  <a
+                    href={entry.metadata.libraryUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Library <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
             )}
           </div>
         </PopoverContent>

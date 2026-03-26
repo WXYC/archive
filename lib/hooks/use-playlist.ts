@@ -5,6 +5,7 @@ import type {
   ArchivePlaylistEntry,
   PlaylistResponse,
 } from "@/lib/types/playlist";
+import type { ArtworkResponse } from "@/app/api/artwork/route";
 
 export interface UsePlaylistResult {
   entries: ArchivePlaylistEntry[];
@@ -54,6 +55,9 @@ export function usePlaylist(
         const data: PlaylistResponse = await response.json();
         setEntries(data.entries);
         setError(null);
+
+        // Kick off lazy artwork enrichment for playcut entries
+        enrichWithArtwork(data.entries, controller.signal);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
           return; // Request was cancelled, don't update state
@@ -88,6 +92,98 @@ export function usePlaylist(
       abortControllerRef.current?.abort();
     };
   }, [selectedDate, selectedHour, archiveSelected, fetchPlaylist]);
+
+  // Artwork cache to avoid re-fetching across hour changes
+  const artworkCacheRef = useRef<Map<string, ArtworkResponse>>(new Map());
+
+  const enrichWithArtwork = useCallback(
+    async (playlistEntries: ArchivePlaylistEntry[], signal: AbortSignal) => {
+      const playcuts = playlistEntries.filter(
+        (e) => e.entryType === "playcut" && e.artistName
+      );
+      if (playcuts.length === 0) return;
+
+      // Mark all playcuts as loading
+      setEntries((prev) =>
+        prev.map((e) =>
+          e.entryType === "playcut" ? { ...e, artworkLoading: true } : e
+        )
+      );
+
+      // Semaphore for concurrency limiting (max 3 concurrent)
+      let running = 0;
+      const queue = [...playcuts];
+
+      const processNext = async (): Promise<void> => {
+        if (signal.aborted || queue.length === 0) return;
+        const entry = queue.shift()!;
+        running++;
+
+        const cacheKey = `${entry.artistName}|${entry.releaseTitle}`;
+        const cached = artworkCacheRef.current.get(cacheKey);
+
+        let artworkData: ArtworkResponse;
+        if (cached) {
+          artworkData = cached;
+        } else {
+          try {
+            const res = await fetch("/api/artwork", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                artist: entry.artistName,
+                album: entry.releaseTitle,
+              }),
+              signal,
+            });
+            artworkData = await res.json();
+            artworkCacheRef.current.set(cacheKey, artworkData);
+          } catch {
+            artworkData = {
+              artworkUrl: null,
+              genre: null,
+              format: null,
+              callNumber: null,
+              libraryUrl: null,
+              discogsUrl: null,
+            };
+          }
+        }
+
+        if (!signal.aborted) {
+          setEntries((prev) =>
+            prev.map((e) =>
+              e.id === entry.id
+                ? {
+                    ...e,
+                    artworkUrl: artworkData.artworkUrl,
+                    artworkLoading: false,
+                    metadata: {
+                      genre: artworkData.genre,
+                      format: artworkData.format,
+                      callNumber: artworkData.callNumber,
+                      libraryUrl: artworkData.libraryUrl,
+                      discogsUrl: artworkData.discogsUrl,
+                    },
+                  }
+                : e
+            )
+          );
+        }
+
+        running--;
+        await processNext();
+      };
+
+      // Start up to 3 concurrent workers
+      const workers = Array.from(
+        { length: Math.min(3, playcuts.length) },
+        () => processNext()
+      );
+      await Promise.all(workers);
+    },
+    []
+  );
 
   return { entries, isLoading, error };
 }
