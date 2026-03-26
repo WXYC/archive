@@ -23,10 +23,18 @@ export function PlaylistItem({ entry, isActive, onClick }: PlaylistItemProps) {
   }
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       className={cn(
-        "flex items-center gap-3 w-full px-3 py-2 text-left transition-colors rounded-md",
+        "flex items-center gap-3 w-full px-3 py-2 text-left transition-colors rounded-md cursor-pointer",
         "hover:bg-gray-100 dark:hover:bg-gray-800",
         isActive &&
           "bg-purple-50 dark:bg-purple-900/20 border-l-2 border-purple-600 dark:border-purple-400"
@@ -150,6 +158,6 @@ export function PlaylistItem({ entry, isActive, onClick }: PlaylistItemProps) {
           </div>
         </PopoverContent>
       </Popover>
-    </button>
+    </div>
   );
 }
