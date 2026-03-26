@@ -35,6 +35,10 @@ interface AudioPlayerProps {
   onHourChange: (hour: number, date: Date) => void;
   onTimeUpdate: (minute: number, second: number) => void;
   config: ArchiveConfig;
+  /** Target time in seconds for external seek (e.g., from playlist click) */
+  seekToSeconds?: number | null;
+  /** Incrementing counter that triggers the seek when changed */
+  seekRequestId?: number;
 }
 
 export default function AudioPlayer({
@@ -49,6 +53,8 @@ export default function AudioPlayer({
   onHourChange,
   onTimeUpdate,
   config,
+  seekToSeconds,
+  seekRequestId,
 }: AudioPlayerProps) {
   const { isAuthenticated } = useAuth();
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -239,6 +245,24 @@ export default function AudioPlayer({
       }
     }
   }, [isPlaying, audioUrl, setIsPlaying]);
+
+  // Handle external seek requests (e.g., from playlist click)
+  useEffect(() => {
+    if (
+      seekRequestId !== undefined &&
+      seekRequestId > 0 &&
+      seekToSeconds != null &&
+      audioRef.current &&
+      audioRef.current.readyState >= 2
+    ) {
+      audioRef.current.currentTime = seekToSeconds;
+      setCurrentTime(seekToSeconds);
+      onTimeUpdate(
+        Math.floor(seekToSeconds / 60),
+        Math.floor(seekToSeconds % 60)
+      );
+    }
+  }, [seekRequestId]); // Only trigger on seekRequestId change
 
   // Handle loaded metadata
   const handleLoadedMetadata = () => {
