@@ -39,10 +39,18 @@ export interface ArchivePlaylistEntry {
   request?: boolean;
   /** Breakpoint label */
   label?: string;
-  /** Album artwork URL from library-metadata-lookup (added in PR 4) */
+  /** Album artwork URL from library-metadata-lookup */
   artworkUrl?: string | null;
   /** Whether artwork is currently being fetched */
   artworkLoading?: boolean;
+  /** Additional metadata from library-metadata-lookup */
+  metadata?: {
+    genre: string | null;
+    format: string | null;
+    callNumber: string | null;
+    libraryUrl: string | null;
+    discogsUrl: string | null;
+  };
 }
 
 /**
