@@ -6,6 +6,8 @@ import {
   getHourLabel,
   createTimestamp,
   getArchiveUrl,
+  computeRadioHourEpoch,
+  computeEntryOffsetSeconds,
 } from "../utils";
 
 describe("cn", () => {
@@ -203,5 +205,74 @@ describe("getArchiveUrl", () => {
     await expect(getArchiveUrl(date, 14, null)).rejects.toThrow("Network error");
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+});
+
+describe("computeRadioHourEpoch", () => {
+  it("returns epoch ms for an EST date (winter)", () => {
+    // Jan 15 2024 at 3:00 PM EST = Jan 15 2024 at 20:00 UTC
+    const result = computeRadioHourEpoch("2024-01-15", 15);
+    const date = new Date(result);
+    // Verify the UTC hour is 20 (15 + 5 for EST)
+    expect(date.getUTCHours()).toBe(20);
+    expect(date.getUTCFullYear()).toBe(2024);
+    expect(date.getUTCMonth()).toBe(0); // January
+    expect(date.getUTCDate()).toBe(15);
+    expect(date.getUTCMinutes()).toBe(0);
+    expect(date.getUTCSeconds()).toBe(0);
+  });
+
+  it("returns epoch ms for an EDT date (summer)", () => {
+    // Jul 15 2024 at 3:00 PM EDT = Jul 15 2024 at 19:00 UTC
+    const result = computeRadioHourEpoch("2024-07-15", 15);
+    const date = new Date(result);
+    expect(date.getUTCHours()).toBe(19);
+    expect(date.getUTCFullYear()).toBe(2024);
+    expect(date.getUTCMonth()).toBe(6); // July
+    expect(date.getUTCDate()).toBe(15);
+  });
+
+  it("handles midnight correctly", () => {
+    // Jan 15 2024 at midnight EST = Jan 15 2024 at 05:00 UTC
+    const result = computeRadioHourEpoch("2024-01-15", 0);
+    const date = new Date(result);
+    expect(date.getUTCHours()).toBe(5);
+    expect(date.getUTCDate()).toBe(15);
+  });
+
+  it("handles late night hours crossing day boundary in UTC", () => {
+    // Jan 15 2024 at 11:00 PM EST = Jan 16 2024 at 04:00 UTC
+    const result = computeRadioHourEpoch("2024-01-15", 23);
+    const date = new Date(result);
+    expect(date.getUTCHours()).toBe(4);
+    expect(date.getUTCDate()).toBe(16);
+  });
+});
+
+describe("computeEntryOffsetSeconds", () => {
+  const radioHourEpoch = 1700000000000;
+
+  it("computes offset for an entry within the hour", () => {
+    const entryTime = radioHourEpoch + 120000; // 2 minutes in
+    expect(computeEntryOffsetSeconds(entryTime, radioHourEpoch)).toBe(120);
+  });
+
+  it("returns 0 for an entry at the start of the hour", () => {
+    expect(computeEntryOffsetSeconds(radioHourEpoch, radioHourEpoch)).toBe(0);
+  });
+
+  it("clamps negative offsets to 0", () => {
+    const entryTime = radioHourEpoch - 5000; // 5 seconds before the hour
+    expect(computeEntryOffsetSeconds(entryTime, radioHourEpoch)).toBe(0);
+  });
+
+  it("clamps offsets beyond 3600 seconds", () => {
+    const entryTime = radioHourEpoch + 4000000; // well past the hour
+    expect(computeEntryOffsetSeconds(entryTime, radioHourEpoch)).toBe(3600);
+  });
+
+  it("handles fractional seconds by flooring", () => {
+    const entryTime = radioHourEpoch + 1500; // 1.5 seconds
+    expect(computeEntryOffsetSeconds(entryTime, radioHourEpoch)).toBe(1);
   });
 });
