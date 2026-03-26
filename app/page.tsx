@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -31,6 +31,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LoginDialog } from "@/components/login-dialog";
 import { defaultConfig, getDateRange, archiveConfigs } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
+import { usePlaylist } from "@/lib/hooks/use-playlist";
+import { PlaylistPanel } from "@/components/playlist-panel";
+import type { ArchivePlaylistEntry } from "@/lib/types/playlist";
 
 function ArchivePageContent() {
   const router = useRouter();
@@ -120,6 +123,45 @@ function ArchivePageContent() {
   const [userDismissed, setUserDismissed] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0);
+  const [seekToSeconds, setSeekToSeconds] = useState<number | null>(null);
+  const [seekRequestId, setSeekRequestId] = useState(0);
+
+  // Playlist data
+  const {
+    entries: playlistEntries,
+    isLoading: playlistLoading,
+    error: playlistError,
+  } = usePlaylist(selectedDate, Number.parseInt(selectedHour), archiveSelected);
+
+  // Derive active entry from playback time
+  const playcutEntries = playlistEntries.filter(
+    (e) => e.entryType === "playcut"
+  );
+  const activeEntryId =
+    playcutEntries.reduce<ArchivePlaylistEntry | null>((best, entry) => {
+      if (
+        entry.offsetSeconds <= currentPlaybackTime &&
+        (!best || entry.offsetSeconds > best.offsetSeconds)
+      ) {
+        return entry;
+      }
+      return best;
+    }, null)?.id ?? null;
+
+  // Handle playlist entry click -> seek audio
+  const handlePlaylistEntryClick = useCallback(
+    (entry: ArchivePlaylistEntry) => {
+      setSeekToSeconds(entry.offsetSeconds);
+      setSeekRequestId((prev) => prev + 1);
+      setCurrentPlaybackTime(entry.offsetSeconds);
+      setSelectedMinute(Math.floor(entry.offsetSeconds / 60).toString());
+      setSelectedSecond(Math.floor(entry.offsetSeconds % 60).toString());
+      if (!isPlaying && archiveSelected) {
+        setIsPlaying(true);
+      }
+    },
+    [isPlaying, archiveSelected]
+  );
 
   // Effect to check if the initial timestamp is out of range
   useEffect(() => {
@@ -218,7 +260,7 @@ function ArchivePageContent() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-3 sm:py-8 pb-32 max-w-4xl min-h-screen">
+    <div className="container mx-auto px-4 py-3 sm:py-8 pb-32 max-w-5xl min-h-screen">
       {invalidLinkReason && (
         <div className="mb-4 p-3 rounded bg-yellow-100 dark:bg-yellow-900 text-yellow-900 dark:text-yellow-100 border border-yellow-300 dark:border-yellow-700 flex justify-between items-center">
           <span>
@@ -252,78 +294,81 @@ function ArchivePageContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="py-2 px-6 sm:py-6">
-          <div className="flex flex-col sm:flex-row gap-6">
-            <div className="w-full sm:flex-1">
-              <Label className="text-sm font-medium mb-2 block">
-                Select Date
-              </Label>
-              <div className="sm:hidden">
-                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Left column: controls */}
+            <div className="lg:w-[320px] lg:flex-shrink-0 flex flex-col gap-6">
+              <div>
+                <Label className="text-sm font-medium mb-2 block">
+                  Select Date
+                </Label>
+                <div className="sm:hidden">
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formatDate(selectedDate)}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-[calc(100vw-2rem)] p-0"
+                      align="center"
+                      sideOffset={8}
                     >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formatDate(selectedDate)}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-[calc(100vw-2rem)] p-0"
-                    align="center"
-                    sideOffset={8}
-                  >
-                    <Calendar
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={(date) => {
-                        if (date) {
-                          setSelectedDate(date);
-                          setCalendarOpen(false);
-                        }
-                      }}
-                      disabled={(date) => date > today || date < allowedStart}
-                      initialFocus
-                      className="w-full"
-                    />
-                  </PopoverContent>
-                </Popover>
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => {
+                          if (date) {
+                            setSelectedDate(date);
+                            setCalendarOpen(false);
+                          }
+                        }}
+                        disabled={(date) => date > today || date < allowedStart}
+                        initialFocus
+                        className="w-full"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                <div className="hidden sm:block">
+                  <style jsx global>{`
+                    .dark button[data-selected-single="true"]:hover {
+                      background-color: var(--primary) !important;
+                      color: var(--primary-foreground) !important;
+                    }
+                  `}</style>
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => date && setSelectedDate(date)}
+                    disabled={(date) => date > today || date < allowedStart}
+                    className="rounded-md border dark:bg-gray-800 w-full"
+                  />
+                </div>
               </div>
-              <div className="hidden sm:block">
-                <style jsx global>{`
-                  .dark button[data-selected-single="true"]:hover {
-                    background-color: var(--primary) !important;
-                    color: var(--primary-foreground) !important;
-                  }
-                `}</style>
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={(date) => date && setSelectedDate(date)}
-                  disabled={(date) => date > today || date < allowedStart}
-                  className="rounded-md border dark:bg-gray-800 w-full"
-                />
+
+              <div>
+                <Label className="text-sm font-medium mb-2 block">
+                  Select Hour
+                </Label>
+                <Select value={selectedHour} onValueChange={setSelectedHour}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select hour" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <SelectItem key={i} value={i.toString()}>
+                        {getHourLabel(i)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
 
-            <div className="flex-1">
-              <Label className="text-sm font-medium mb-2 block">
-                Select Hour
-              </Label>
-              <Select value={selectedHour} onValueChange={setSelectedHour}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select hour" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 24 }, (_, i) => (
-                    <SelectItem key={i} value={i.toString()}>
-                      {getHourLabel(i)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <div className="mt-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
                 <h3 className="font-medium text-purple-900 dark:text-purple-100">
                   Selected Archive
                 </h3>
@@ -352,6 +397,22 @@ function ArchivePageContent() {
                 </Button>
               </div>
             </div>
+
+            {/* Right column: playlist */}
+            <div className="flex-1 min-h-[300px] lg:max-h-[500px]">
+              <Label className="text-sm font-medium mb-2 block">
+                Playlist
+              </Label>
+              <div className="border dark:border-gray-700 rounded-md h-full overflow-hidden">
+                <PlaylistPanel
+                  entries={playlistEntries}
+                  isLoading={playlistLoading}
+                  error={playlistError}
+                  activeEntryId={activeEntryId}
+                  onEntryClick={handlePlaylistEntryClick}
+                />
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -373,6 +434,8 @@ function ArchivePageContent() {
           setCurrentPlaybackTime(minute * 60 + second);
         }}
         config={selectedConfig}
+        seekToSeconds={seekToSeconds}
+        seekRequestId={seekRequestId}
       />
     </div>
   );
