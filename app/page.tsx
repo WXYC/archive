@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { formatDate, getArchiveUrl, getHourLabel } from "@/lib/utils";
-import { CalendarIcon, Play, Pause } from "lucide-react";
+import { CalendarIcon } from "lucide-react";
 import AudioPlayer from "@/components/audio-player";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -116,7 +116,7 @@ function ArchivePageContent() {
   );
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [archiveSelected, setArchiveSelected] = useState(!!timestamp);
+  const [archiveSelected, setArchiveSelected] = useState(true);
   const [invalidLinkReason, setInvalidLinkReason] = useState<string | null>(
     null
   );
@@ -156,11 +156,11 @@ function ArchivePageContent() {
       setCurrentPlaybackTime(entry.offsetSeconds);
       setSelectedMinute(Math.floor(entry.offsetSeconds / 60).toString());
       setSelectedSecond(Math.floor(entry.offsetSeconds % 60).toString());
-      if (!isPlaying && archiveSelected) {
+      if (!isPlaying) {
         setIsPlaying(true);
       }
     },
-    [isPlaying, archiveSelected]
+    [isPlaying]
   );
 
   // Effect to check if the initial timestamp is out of range
@@ -236,15 +236,6 @@ function ArchivePageContent() {
     updateAudioUrl();
   }, [selectedDate, selectedHour, archiveSelected, getToken]);
 
-  const handlePlay = () => {
-    if (isPlaying) {
-      setIsPlaying(false);
-      return;
-    }
-    setArchiveSelected(true);
-    setIsPlaying(true);
-  };
-
   // Update handler for hour changes to include date
   const handleHourChange = (newHour: number, newDate: Date) => {
     // Check if the new date is within the allowed range
@@ -260,7 +251,7 @@ function ArchivePageContent() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-3 sm:py-8 pb-32 max-w-5xl min-h-screen">
+    <div className="container mx-auto px-4 py-3 sm:py-4 max-w-5xl h-screen flex flex-col overflow-hidden">
       {invalidLinkReason && (
         <div className="mb-4 p-3 rounded bg-yellow-100 dark:bg-yellow-900 text-yellow-900 dark:text-yellow-100 border border-yellow-300 dark:border-yellow-700 flex justify-between items-center">
           <span>
@@ -283,7 +274,7 @@ function ArchivePageContent() {
         <LoginDialog />
         <ThemeToggle />
       </div>
-      <Card className="border-none shadow-lg dark:bg-gray-800 py-0">
+      <Card className="border-none shadow-lg dark:bg-gray-800 py-0 flex-1 flex flex-col min-h-0">
         <CardHeader className="bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-t-lg py-4">
           <CardTitle className="text-2xl sm:text-3xl font-bold">
             WXYC Archive Player
@@ -293,8 +284,8 @@ function ArchivePageContent() {
             {selectedConfig.dateRange.description}
           </CardDescription>
         </CardHeader>
-        <CardContent className="py-2 px-6 sm:py-6">
-          <div className="flex flex-col lg:flex-row gap-6">
+        <CardContent className="py-2 px-6 sm:py-6 flex-1 flex flex-col min-h-0">
+          <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 flex-1 min-h-0">
             {/* Left column: controls */}
             <div className="lg:w-[320px] lg:flex-shrink-0 flex flex-col gap-6">
               <div>
@@ -368,42 +359,14 @@ function ArchivePageContent() {
                 </Select>
               </div>
 
-              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                <h3 className="font-medium text-purple-900 dark:text-purple-100">
-                  Selected Archive
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                  {formatDate(selectedDate)} at{" "}
-                  {getHourLabel(
-                    Number.parseInt(selectedHour),
-                    Math.min(59, Math.floor(currentPlaybackTime / 60))
-                  )}
-                </p>
-                <Button
-                  className="w-full mt-4 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600"
-                  onClick={handlePlay}
-                >
-                  {isPlaying ? (
-                    <>
-                      <Pause className="h-4 w-4 mr-2" />
-                      Pause
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Play
-                    </>
-                  )}
-                </Button>
-              </div>
             </div>
 
             {/* Right column: playlist */}
-            <div className="flex-1 min-h-[300px] lg:max-h-[500px]">
+            <div className="flex-1 flex flex-col min-h-0">
               <Label className="text-sm font-medium mb-2 block">
                 Playlist
               </Label>
-              <div className="border dark:border-gray-700 rounded-md h-full overflow-hidden">
+              <div className="border dark:border-gray-700 rounded-md flex-1 overflow-hidden">
                 <PlaylistPanel
                   entries={playlistEntries}
                   isLoading={playlistLoading}
@@ -414,11 +377,9 @@ function ArchivePageContent() {
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Fixed audio player at bottom */}
-      <AudioPlayer
+          {/* Playback controls */}
+          <AudioPlayer
         audioUrl={audioUrl}
         isPlaying={isPlaying}
         setIsPlaying={setIsPlaying}
@@ -437,6 +398,8 @@ function ArchivePageContent() {
         seekToSeconds={seekToSeconds}
         seekRequestId={seekRequestId}
       />
+        </CardContent>
+      </Card>
     </div>
   );
 }
