@@ -341,8 +341,8 @@ export default function AudioPlayer({
 
   return (
     <TooltipProvider>
-      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 p-4">
-        <div className="container mx-auto max-w-4xl">
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+        <div>
           <div className="flex flex-col gap-4">
             {/* Mobile scrubber with times */}
             <div className="sm:hidden flex flex-col gap-2">
