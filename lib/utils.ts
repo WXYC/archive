@@ -83,6 +83,52 @@ export async function getArchiveUrl(
   }
 }
 
+/**
+ * Compute the epoch milliseconds for a radio hour in America/New_York timezone.
+ * Tubafrenzy stores radioHour as epoch ms at the hour boundary in Eastern time.
+ *
+ * @param dateStr ISO date string (YYYY-MM-DD)
+ * @param hour Hour of day (0-23)
+ * @returns Epoch milliseconds for that hour in Eastern time
+ */
+export function computeRadioHourEpoch(dateStr: string, hour: number): number {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "2-digit",
+    hour12: false,
+  });
+
+  // Try EST (-5) then EDT (-4). One of these will produce the correct
+  // Eastern hour for the target date.
+  for (const offset of [5, 4]) {
+    const candidate = Date.UTC(y, m - 1, d, hour + offset, 0, 0, 0);
+    const etHour = parseInt(formatter.format(new Date(candidate)));
+    if (etHour === hour) {
+      return candidate;
+    }
+  }
+
+  // Fallback (shouldn't happen for America/New_York)
+  return Date.UTC(y, m - 1, d, hour + 5, 0, 0, 0);
+}
+
+/**
+ * Compute the offset in seconds of an entry within its radio hour.
+ *
+ * @param entryTimeCreated Entry's timeCreated in epoch ms
+ * @param radioHourEpoch Radio hour start in epoch ms
+ * @returns Seconds into the hour (clamped to [0, 3600])
+ */
+export function computeEntryOffsetSeconds(
+  entryTimeCreated: number,
+  radioHourEpoch: number
+): number {
+  const offsetMs = entryTimeCreated - radioHourEpoch;
+  const offsetSeconds = Math.floor(offsetMs / 1000);
+  return Math.max(0, Math.min(3600, offsetSeconds));
+}
+
 export function createTimestamp(
   date: Date,
   hour: number,
