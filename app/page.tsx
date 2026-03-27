@@ -28,6 +28,7 @@ import { CalendarIcon } from "lucide-react";
 import AudioPlayer from "@/components/audio-player";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { LoginDialog } from "@/components/login-dialog";
 import { defaultConfig, getDateRange, archiveConfigs } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
@@ -147,8 +148,8 @@ function ArchivePageContent() {
       return best;
     }, null)?.id ?? null;
 
-  // Handle playlist entry click -> seek audio
-  const handlePlaylistEntryClick = useCallback(
+  // Seek to a playlist entry (used by click handler and keyboard shortcuts)
+  const seekToEntry = useCallback(
     (entry: ArchivePlaylistEntry) => {
       setSeekToSeconds(entry.offsetSeconds);
       setSeekRequestId((prev) => prev + 1);
@@ -161,6 +162,46 @@ function ArchivePageContent() {
     },
     [isPlaying]
   );
+
+  // Handle playlist entry click -> seek audio
+  const handlePlaylistEntryClick = seekToEntry;
+
+  // Handle J/K keyboard shortcuts for track navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      if (e.key !== "j" && e.key !== "k") return;
+      if (playcutEntries.length === 0) return;
+
+      e.preventDefault();
+
+      const activeIndex = playcutEntries.findIndex(
+        (entry) => entry.id === activeEntryId
+      );
+
+      if (e.key === "j") {
+        // Previous track
+        const targetIndex = activeIndex > 0 ? activeIndex - 1 : 0;
+        seekToEntry(playcutEntries[targetIndex]);
+      } else {
+        // Next track (k)
+        const targetIndex =
+          activeIndex < playcutEntries.length - 1
+            ? activeIndex + 1
+            : playcutEntries.length - 1;
+        seekToEntry(playcutEntries[targetIndex]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [playcutEntries, activeEntryId, seekToEntry]);
 
   // Effect to check if the initial timestamp is out of range
   useEffect(() => {
@@ -271,7 +312,10 @@ function ArchivePageContent() {
       )}
       <div className="flex justify-between items-center mb-4">
         <LoginDialog />
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <KeyboardShortcutsDialog />
+          <ThemeToggle />
+        </div>
       </div>
       <Card className="border-none shadow-lg dark:bg-gray-800 py-0 flex-1 flex flex-col min-h-0">
         <CardHeader className="bg-gradient-to-r from-purple-700 to-indigo-700 text-white rounded-t-lg py-4">
