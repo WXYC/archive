@@ -376,6 +376,60 @@ describe("AudioPlayer", () => {
       // Should not call setIsPlaying(true) from keyboard handler
       expect(setIsPlaying).not.toHaveBeenCalledWith(true);
     });
+
+    it("skips to previous hour on Shift+ArrowLeft", () => {
+      const onHourChange = vi.fn();
+
+      const { container } = render(
+        <AudioPlayer {...defaultProps} onHourChange={onHourChange} />
+      );
+
+      simulateAudioLoaded(container);
+
+      fireEvent.keyDown(window, { code: "ArrowLeft", shiftKey: true });
+
+      expect(onHourChange).toHaveBeenCalledWith(13, expect.any(Date));
+    });
+
+    it("skips to next hour on Shift+ArrowRight", () => {
+      const onHourChange = vi.fn();
+
+      const { container } = render(
+        <AudioPlayer {...defaultProps} onHourChange={onHourChange} />
+      );
+
+      simulateAudioLoaded(container);
+
+      fireEvent.keyDown(window, { code: "ArrowRight", shiftKey: true });
+
+      expect(onHourChange).toHaveBeenCalledWith(15, expect.any(Date));
+    });
+
+    it("does not skip hour on Shift+Arrow when no archive is selected", () => {
+      const onHourChange = vi.fn();
+
+      render(
+        <AudioPlayer {...defaultProps} archiveSelected={false} onHourChange={onHourChange} />
+      );
+
+      fireEvent.keyDown(window, { code: "ArrowRight", shiftKey: true });
+
+      expect(onHourChange).not.toHaveBeenCalled();
+    });
+
+    it("seeks 5 seconds on plain ArrowLeft (without Shift)", () => {
+      const onHourChange = vi.fn();
+      const { container } = render(
+        <AudioPlayer {...defaultProps} onHourChange={onHourChange} />
+      );
+
+      simulateAudioLoaded(container);
+
+      // Plain ArrowLeft should seek, not change hour
+      fireEvent.keyDown(window, { code: "ArrowLeft", shiftKey: false });
+
+      expect(onHourChange).not.toHaveBeenCalled();
+    });
   });
 
   describe("download button", () => {

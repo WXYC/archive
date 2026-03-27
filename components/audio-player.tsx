@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,6 +77,32 @@ export default function AudioPlayer({
     }
   };
 
+  // Handle hour changes with day wrapping and date range checks
+  const changeHour = useCallback((hours: number) => {
+    const newDate = new Date(selectedDate);
+    let newHour = selectedHour + hours;
+
+    // Handle day changes
+    if (newHour < 0) {
+      newHour = 23;
+      newDate.setDate(newDate.getDate() - 1);
+    } else if (newHour > 23) {
+      newHour = 0;
+      newDate.setDate(newDate.getDate() + 1);
+    }
+
+    // Check if the new date is within the allowed range
+    const today = new Date();
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - config.dateRange.days);
+
+    if (newDate > today || newDate < startDate) {
+      return; // Don't update if outside the allowed range
+    }
+
+    onHourChange(newHour, newDate);
+  }, [selectedDate, selectedHour, config.dateRange.days, onHourChange]);
+
   // Handle keyboard events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -97,19 +123,27 @@ export default function AudioPlayer({
           break;
         case "ArrowLeft":
           e.preventDefault();
-          if (audioRef.current && audioUrl) {
-            const newTime = Math.max(0, audioRef.current.currentTime - 5); // Skip back 5 seconds
+          if (e.shiftKey) {
+            if (archiveSelected && !isTransitioning) {
+              changeHour(-1);
+            }
+          } else if (audioRef.current && audioUrl) {
+            const newTime = Math.max(0, audioRef.current.currentTime - 5);
             audioRef.current.currentTime = newTime;
             setCurrentTime(newTime);
           }
           break;
         case "ArrowRight":
           e.preventDefault();
-          if (audioRef.current && audioUrl) {
+          if (e.shiftKey) {
+            if (archiveSelected && !isTransitioning) {
+              changeHour(1);
+            }
+          } else if (audioRef.current && audioUrl) {
             const newTime = Math.min(
               audioRef.current.duration,
               audioRef.current.currentTime + 5
-            ); // Skip forward 5 seconds
+            );
             audioRef.current.currentTime = newTime;
             setCurrentTime(newTime);
           }
@@ -119,7 +153,7 @@ export default function AudioPlayer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [audioUrl, isLoading, togglePlayPause]);
+  }, [audioUrl, isLoading, togglePlayPause, archiveSelected, isTransitioning, changeHour]);
 
   // Handle mute toggle
   const toggleMute = () => {
@@ -151,32 +185,6 @@ export default function AudioPlayer({
         }
       });
     }
-  };
-
-  // Update the changeHour function to handle day changes and respect date range
-  const changeHour = (hours: number) => {
-    const newDate = new Date(selectedDate);
-    let newHour = selectedHour + hours;
-
-    // Handle day changes
-    if (newHour < 0) {
-      newHour = 23;
-      newDate.setDate(newDate.getDate() - 1);
-    } else if (newHour > 23) {
-      newHour = 0;
-      newDate.setDate(newDate.getDate() + 1);
-    }
-
-    // Check if the new date is within the allowed range
-    const today = new Date();
-    const startDate = new Date();
-    startDate.setDate(today.getDate() - config.dateRange.days);
-
-    if (newDate > today || newDate < startDate) {
-      return; // Don't update if outside the allowed range
-    }
-
-    onHourChange(newHour, newDate);
   };
 
   // Update handler for when audio ends
