@@ -48,10 +48,9 @@ function ArchivePageContent() {
   const { today, startDate: allowedStart } = getDateRange(selectedConfig);
   const { startDate: djStart } = getDateRange(djConfig);
 
-  // Set default to yesterday at noon
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  yesterday.setHours(12, 0, 0, 0);
+  // Default to the most recent completed hour
+  const latestArchiveHour = new Date();
+  latestArchiveHour.setHours(latestArchiveHour.getHours() - 1, 0, 0, 0);
 
   // Helper function to parse timestamp from URL
   const parseTimestamp = (
@@ -103,10 +102,10 @@ function ArchivePageContent() {
 
   // State
   const [selectedDate, setSelectedDate] = useState<Date>(
-    initialState?.date || yesterday
+    initialState?.date || latestArchiveHour
   );
   const [selectedHour, setSelectedHour] = useState<string>(
-    initialState?.hour || "12"
+    initialState?.hour || latestArchiveHour.getHours().toString()
   );
   const [selectedMinute, setSelectedMinute] = useState<string>(
     initialState?.minute || "0"
