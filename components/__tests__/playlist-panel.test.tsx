@@ -1,15 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { PlaylistPanel } from "../playlist-panel";
-import type { ArchivePlaylistEntry } from "@/lib/types/playlist";
+import type { DailyPlaylistEntry, ShowBlock } from "@/lib/types/playlist";
 
 function createPlaycutEntry(
-  overrides: Partial<ArchivePlaylistEntry> = {}
-): ArchivePlaylistEntry {
+  overrides: Partial<DailyPlaylistEntry> = {}
+): DailyPlaylistEntry {
   return {
     id: 100,
     entryType: "playcut",
     offsetSeconds: 120,
+    dayOffsetSeconds: 7320,
+    hour: 2,
+    radioShowId: 1,
     artistName: "Juana Molina",
     songTitle: "la paradoja",
     releaseTitle: "DOGA",
@@ -20,11 +23,26 @@ function createPlaycutEntry(
   };
 }
 
+function createShowBlock(
+  overrides: Partial<ShowBlock> = {},
+  entries: DailyPlaylistEntry[] = []
+): ShowBlock {
+  return {
+    showId: 1,
+    djHandle: "DJ Biscuit",
+    showName: null,
+    signonTime: 1711519200000,
+    signoffTime: 1711526400000,
+    entries,
+    ...overrides,
+  };
+}
+
 describe("PlaylistPanel", () => {
   it("renders loading skeletons when isLoading is true", () => {
     const { container } = render(
       <PlaylistPanel
-        entries={[]}
+        shows={[]}
         isLoading={true}
         error={null}
         activeEntryId={null}
@@ -32,7 +50,6 @@ describe("PlaylistPanel", () => {
       />
     );
 
-    // Skeletons render as divs with animation class
     const skeletons = container.querySelectorAll("[data-slot='skeleton']");
     expect(skeletons.length).toBeGreaterThan(0);
   });
@@ -40,7 +57,7 @@ describe("PlaylistPanel", () => {
   it("renders error message when error is set", () => {
     render(
       <PlaylistPanel
-        entries={[]}
+        shows={[]}
         isLoading={false}
         error="Failed to load playlist"
         activeEntryId={null}
@@ -51,10 +68,10 @@ describe("PlaylistPanel", () => {
     expect(screen.getByText("Failed to load playlist")).toBeInTheDocument();
   });
 
-  it("renders empty state when no playcut entries", () => {
+  it("renders empty state when no shows have playcut entries", () => {
     render(
       <PlaylistPanel
-        entries={[]}
+        shows={[]}
         isLoading={false}
         error={null}
         activeEntryId={null}
@@ -63,49 +80,20 @@ describe("PlaylistPanel", () => {
     );
 
     expect(
-      screen.getByText("No playlist data available for this hour")
+      screen.getByText("No playlist data available for this day")
     ).toBeInTheDocument();
   });
 
-  it("renders empty state when only non-playcut entries exist", () => {
-    const entries: ArchivePlaylistEntry[] = [
-      {
-        id: 1,
-        entryType: "talkset",
-        offsetSeconds: 0,
-      },
-      {
-        id: 2,
-        entryType: "breakpoint",
-        offsetSeconds: 3600,
-        label: "3:00 AM",
-      },
-    ];
-
-    render(
-      <PlaylistPanel
-        entries={entries}
-        isLoading={false}
-        error={null}
-        activeEntryId={null}
-        onEntryClick={vi.fn()}
-      />
-    );
-
-    expect(
-      screen.getByText("No playlist data available for this hour")
-    ).toBeInTheDocument();
-  });
-
-  it("renders playcut entries with artist and song", () => {
+  it("renders show header and playcut entries", () => {
     const entries = [
       createPlaycutEntry({ id: 1, artistName: "Stereolab", songTitle: "Ping Pong" }),
       createPlaycutEntry({ id: 2, artistName: "Cat Power", songTitle: "Metal Heart" }),
     ];
+    const shows = [createShowBlock({}, entries)];
 
     render(
       <PlaylistPanel
-        entries={entries}
+        shows={shows}
         isLoading={false}
         error={null}
         activeEntryId={null}
@@ -113,6 +101,7 @@ describe("PlaylistPanel", () => {
       />
     );
 
+    expect(screen.getByText("DJ Biscuit")).toBeInTheDocument();
     expect(screen.getByText("Stereolab")).toBeInTheDocument();
     expect(screen.getByText("Ping Pong")).toBeInTheDocument();
     expect(screen.getByText("Cat Power")).toBeInTheDocument();
@@ -122,6 +111,7 @@ describe("PlaylistPanel", () => {
   it("calls onEntryClick when an entry is clicked", async () => {
     const onEntryClick = vi.fn();
     const entry = createPlaycutEntry({ id: 1, songTitle: "Test Song" });
+    const shows = [createShowBlock({}, [entry])];
 
     const { user } = await import("@testing-library/user-event").then((m) => ({
       user: m.default.setup(),
@@ -129,7 +119,7 @@ describe("PlaylistPanel", () => {
 
     render(
       <PlaylistPanel
-        entries={[entry]}
+        shows={shows}
         isLoading={false}
         error={null}
         activeEntryId={null}
@@ -139,5 +129,26 @@ describe("PlaylistPanel", () => {
 
     await user.click(screen.getByText("Test Song"));
     expect(onEntryClick).toHaveBeenCalledWith(entry);
+  });
+
+  it("renders show name when present", () => {
+    const shows = [
+      createShowBlock(
+        { showName: "Friday Night Jazz" },
+        [createPlaycutEntry({ id: 1 })]
+      ),
+    ];
+
+    render(
+      <PlaylistPanel
+        shows={shows}
+        isLoading={false}
+        error={null}
+        activeEntryId={null}
+        onEntryClick={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Friday Night Jazz/)).toBeInTheDocument();
   });
 });
