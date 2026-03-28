@@ -12,7 +12,7 @@ import {
   SkipForward,
   Download,
 } from "lucide-react";
-import { formatTime } from "@/lib/utils";
+import { formatTime, getArchiveUrl } from "@/lib/utils";
 import { ArchiveConfig } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
 import { ShareDialog } from "@/components/share-dialog";
@@ -39,6 +39,8 @@ interface AudioPlayerProps {
   seekToSeconds?: number | null;
   /** Incrementing counter that triggers the seek when changed */
   seekRequestId?: number;
+  /** Token getter for preloading next hour's presigned URL */
+  getToken?: () => Promise<string | null>;
 }
 
 export default function AudioPlayer({
@@ -55,15 +57,22 @@ export default function AudioPlayer({
   config,
   seekToSeconds,
   seekRequestId,
+  getToken,
 }: AudioPlayerProps) {
   const { isAuthenticated } = useAuth();
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const preloadRef = useRef<HTMLAudioElement | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [preloadedNextHour, setPreloadedNextHour] = useState<{
+    url: string;
+    hour: number;
+    date: Date;
+  } | null>(null);
 
   // Handle play/pause
   const togglePlayPause = () => {
@@ -187,32 +196,90 @@ export default function AudioPlayer({
     }
   };
 
+  // Preload the next hour's MP3 when approaching the end of the current one.
+  // The browser only fetches enough to start playback (HTTP range requests), not the full file.
+  useEffect(() => {
+    if (!getToken || duration === 0 || currentTime < duration - 15) return;
+    if (preloadedNextHour) return; // Already preloading
+
+    const nextDate = new Date(selectedDate);
+    let nextHour = selectedHour + 1;
+    if (nextHour > 23) {
+      nextHour = 0;
+      nextDate.setDate(nextDate.getDate() + 1);
+    }
+
+    const today = new Date();
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - config.dateRange.days);
+    if (nextDate > today || nextDate < startDate) return;
+
+    (async () => {
+      try {
+        const token = await getToken();
+        const url = await getArchiveUrl(nextDate, nextHour, token);
+        setPreloadedNextHour({ url, hour: nextHour, date: nextDate });
+        if (preloadRef.current) {
+          preloadRef.current.src = url;
+          preloadRef.current.load();
+        }
+      } catch {
+        // Preload is best-effort; fail silently
+      }
+    })();
+  }, [currentTime, duration, getToken, preloadedNextHour, selectedDate, selectedHour, config.dateRange.days]);
+
+  // Reset preload when hour changes manually
+  useEffect(() => {
+    setPreloadedNextHour(null);
+    if (preloadRef.current) {
+      preloadRef.current.removeAttribute("src");
+      preloadRef.current.load();
+    }
+  }, [selectedHour, selectedDate]);
+
   // Update handler for when audio ends
   const handleAudioEnded = () => {
+    // Try to use preloaded audio for gapless transition
+    if (
+      preloadedNextHour &&
+      preloadRef.current &&
+      preloadRef.current.readyState >= 2
+    ) {
+      // Swap: start playing preloaded audio immediately
+      preloadRef.current.play().catch(console.error);
+
+      // Swap refs so the preloaded element becomes the active one
+      const temp = audioRef.current;
+      audioRef.current = preloadRef.current;
+      preloadRef.current = temp;
+
+      // Advance hour state
+      onHourChange(preloadedNextHour.hour, preloadedNextHour.date);
+      setPreloadedNextHour(null);
+      return;
+    }
+
+    // Fallback: standard hour transition (with brief gap)
     setIsTransitioning(true);
-    // Move to next hour
     const newDate = new Date(selectedDate);
     let newHour = selectedHour + 1;
 
-    // Handle day change
     if (newHour > 23) {
       newHour = 0;
       newDate.setDate(newDate.getDate() + 1);
     }
 
-    // Check if the new date is within the allowed range
     const today = new Date();
     const startDate = new Date();
     startDate.setDate(today.getDate() - config.dateRange.days);
 
     if (newDate > today || newDate < startDate) {
-      // If outside range, stop playing
       setIsPlaying(false);
       setIsTransitioning(false);
       return;
     }
 
-    // Update to next hour and keep playing
     onHourChange(newHour, newDate);
   };
 
@@ -542,6 +609,9 @@ export default function AudioPlayer({
             }}
             onEnded={handleAudioEnded}
           />
+
+          {/* Hidden preload element for gapless hour transitions */}
+          <audio ref={preloadRef} preload="auto" />
         </div>
       </div>
     </TooltipProvider>

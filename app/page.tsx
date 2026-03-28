@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -32,9 +32,9 @@ import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog"
 import { LoginDialog } from "@/components/login-dialog";
 import { defaultConfig, getDateRange, archiveConfigs } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
-import { usePlaylist } from "@/lib/hooks/use-playlist";
+import { useDailyPlaylist } from "@/lib/hooks/use-daily-playlist";
 import { PlaylistPanel } from "@/components/playlist-panel";
-import type { ArchivePlaylistEntry } from "@/lib/types/playlist";
+import type { DailyPlaylistEntry } from "@/lib/types/playlist";
 
 function ArchivePageContent() {
   const router = useRouter();
@@ -61,7 +61,7 @@ function ArchivePageContent() {
 
     try {
       const year = parseInt(timestamp.slice(0, 4));
-      const month = parseInt(timestamp.slice(4, 6)) - 1; // JS months are 0-based
+      const month = parseInt(timestamp.slice(4, 6)) - 1;
       const day = parseInt(timestamp.slice(6, 8));
       const hour = parseInt(timestamp.slice(8, 10));
       const minute = parseInt(timestamp.slice(10, 12));
@@ -97,7 +97,7 @@ function ArchivePageContent() {
     return `${year}${month}${day}${hourStr}${minuteStr}${secondStr}`;
   };
 
-  // Initialize state from URL params if they exist, otherwise use yesterday at noon
+  // Initialize state from URL params if they exist
   const timestamp = searchParams.get("t");
   const initialState = timestamp ? parseTimestamp(timestamp) : null;
 
@@ -125,32 +125,44 @@ function ArchivePageContent() {
   const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0);
   const [seekToSeconds, setSeekToSeconds] = useState<number | null>(null);
   const [seekRequestId, setSeekRequestId] = useState(0);
+  const [pendingSeekSeconds, setPendingSeekSeconds] = useState<number | null>(null);
 
-  // Playlist data
+  // Daily playlist data (keyed on date only — hour changes don't refetch)
   const {
-    entries: playlistEntries,
+    shows,
     isLoading: playlistLoading,
     error: playlistError,
-  } = usePlaylist(selectedDate, Number.parseInt(selectedHour), archiveSelected);
+  } = useDailyPlaylist(selectedDate, archiveSelected);
 
-  // Derive active entry from playback time
-  const playcutEntries = playlistEntries.filter(
-    (e) => e.entryType === "playcut"
+  // Flat sorted list of all playcuts across all shows (for J/K navigation + active entry)
+  const allPlaycutEntries = useMemo(
+    () =>
+      shows
+        .flatMap((show) =>
+          show.entries.filter((e) => e.entryType === "playcut")
+        )
+        .sort((a, b) => a.dayOffsetSeconds - b.dayOffsetSeconds),
+    [shows]
   );
+
+  // Derive active entry from playback time (day-level)
+  const currentDayOffsetSeconds =
+    parseInt(selectedHour) * 3600 + currentPlaybackTime;
+
   const activeEntryId =
-    playcutEntries.reduce<ArchivePlaylistEntry | null>((best, entry) => {
+    allPlaycutEntries.reduce<DailyPlaylistEntry | null>((best, entry) => {
       if (
-        entry.offsetSeconds <= currentPlaybackTime &&
-        (!best || entry.offsetSeconds > best.offsetSeconds)
+        entry.dayOffsetSeconds <= currentDayOffsetSeconds &&
+        (!best || entry.dayOffsetSeconds > best.dayOffsetSeconds)
       ) {
         return entry;
       }
       return best;
     }, null)?.id ?? null;
 
-  // Seek to a playlist entry (used by click handler and keyboard shortcuts)
+  // Seek to a playlist entry within the current hour
   const seekToEntry = useCallback(
-    (entry: ArchivePlaylistEntry) => {
+    (entry: DailyPlaylistEntry) => {
       setSeekToSeconds(entry.offsetSeconds);
       setSeekRequestId((prev) => prev + 1);
       setCurrentPlaybackTime(entry.offsetSeconds);
@@ -163,10 +175,33 @@ function ArchivePageContent() {
     [isPlaying]
   );
 
-  // Handle playlist entry click -> seek audio
-  const handlePlaylistEntryClick = seekToEntry;
+  // Handle playlist entry click -> seek audio (cross-hour aware)
+  const handlePlaylistEntryClick = useCallback(
+    (entry: DailyPlaylistEntry) => {
+      if (entry.hour !== parseInt(selectedHour)) {
+        setSelectedHour(entry.hour.toString());
+        setPendingSeekSeconds(entry.offsetSeconds);
+        if (!isPlaying) setIsPlaying(true);
+      } else {
+        seekToEntry(entry);
+      }
+    },
+    [selectedHour, isPlaying, seekToEntry]
+  );
 
-  // Handle J/K keyboard shortcuts for track navigation
+  // Apply pending seek after hour change triggers a new MP3 load
+  useEffect(() => {
+    if (pendingSeekSeconds !== null && audioUrl) {
+      setSeekToSeconds(pendingSeekSeconds);
+      setSeekRequestId((prev) => prev + 1);
+      setCurrentPlaybackTime(pendingSeekSeconds);
+      setSelectedMinute(Math.floor(pendingSeekSeconds / 60).toString());
+      setSelectedSecond(Math.floor(pendingSeekSeconds % 60).toString());
+      setPendingSeekSeconds(null);
+    }
+  }, [audioUrl, pendingSeekSeconds]);
+
+  // Handle J/K keyboard shortcuts for track navigation (cross-hour)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -177,31 +212,37 @@ function ArchivePageContent() {
       }
 
       if (e.key !== "j" && e.key !== "k") return;
-      if (playcutEntries.length === 0) return;
+      if (allPlaycutEntries.length === 0) return;
 
       e.preventDefault();
 
-      const activeIndex = playcutEntries.findIndex(
+      const activeIndex = allPlaycutEntries.findIndex(
         (entry) => entry.id === activeEntryId
       );
 
+      let targetIndex: number;
       if (e.key === "j") {
-        // Previous track
-        const targetIndex = activeIndex > 0 ? activeIndex - 1 : 0;
-        seekToEntry(playcutEntries[targetIndex]);
+        targetIndex = activeIndex > 0 ? activeIndex - 1 : 0;
       } else {
-        // Next track (k)
-        const targetIndex =
-          activeIndex < playcutEntries.length - 1
+        targetIndex =
+          activeIndex < allPlaycutEntries.length - 1
             ? activeIndex + 1
-            : playcutEntries.length - 1;
-        seekToEntry(playcutEntries[targetIndex]);
+            : allPlaycutEntries.length - 1;
+      }
+
+      const targetEntry = allPlaycutEntries[targetIndex];
+      if (targetEntry.hour !== parseInt(selectedHour)) {
+        setSelectedHour(targetEntry.hour.toString());
+        setPendingSeekSeconds(targetEntry.offsetSeconds);
+        if (!isPlaying) setIsPlaying(true);
+      } else {
+        seekToEntry(targetEntry);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [playcutEntries, activeEntryId, seekToEntry]);
+  }, [allPlaycutEntries, activeEntryId, seekToEntry, selectedHour, isPlaying]);
 
   // Effect to check if the initial timestamp is out of range
   useEffect(() => {
@@ -236,17 +277,16 @@ function ArchivePageContent() {
 
   // Function to update URL with current selection
   const updateUrl = (date: Date, hour: string) => {
-    // Only update URL if the date is within the allowed range
     if (date > today || date < allowedStart) {
       return;
     }
-    const timestamp = createTimestamp(
+    const ts = createTimestamp(
       date,
       parseInt(hour),
       parseInt(selectedMinute),
       parseInt(selectedSecond)
     );
-    router.push(`?t=${timestamp}`, { scroll: false });
+    router.push(`?t=${ts}`, { scroll: false });
   };
 
   // Update URL when date or hour changes
@@ -278,14 +318,12 @@ function ArchivePageContent() {
 
   // Update handler for hour changes to include date
   const handleHourChange = (newHour: number, newDate: Date) => {
-    // Check if the new date is within the allowed range
     if (newDate > today || newDate < allowedStart) {
-      return; // Don't update if outside the allowed range
+      return;
     }
 
     setSelectedDate(newDate);
     setSelectedHour(newHour.toString());
-    // Reset minute and second to 0 when changing hours
     setSelectedMinute("0");
     setSelectedSecond("0");
   };
@@ -329,61 +367,8 @@ function ArchivePageContent() {
         </CardHeader>
         <CardContent className="py-2 px-6 sm:py-6 flex-1 flex flex-col min-h-0">
           <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 flex-1 min-h-0">
-            {/* Left column: controls */}
-            <div className="lg:w-[320px] lg:flex-shrink-0 flex flex-col gap-6">
-              <div>
-                <Label className="text-sm font-medium mb-2 block">
-                  Select Date
-                </Label>
-                <div className="sm:hidden">
-                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formatDate(selectedDate)}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-[calc(100vw-2rem)] p-0"
-                      align="center"
-                      sideOffset={8}
-                    >
-                      <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={(date) => {
-                          if (date) {
-                            setSelectedDate(date);
-                            setCalendarOpen(false);
-                          }
-                        }}
-                        disabled={(date) => date > today || date < allowedStart}
-                        initialFocus
-                        className="w-full"
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-                <div className="hidden sm:block">
-                  <style jsx global>{`
-                    .dark button[data-selected-single="true"]:hover {
-                      background-color: var(--primary) !important;
-                      color: var(--primary-foreground) !important;
-                    }
-                  `}</style>
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => date && setSelectedDate(date)}
-                    disabled={(date) => date > today || date < allowedStart}
-                    className="rounded-md border dark:bg-gray-800 w-full"
-                  />
-                </div>
-              </div>
-
+            {/* Left column: hour picker */}
+            <div className="lg:w-[200px] lg:flex-shrink-0 flex flex-col gap-6">
               <div>
                 <Label className="text-sm font-medium mb-2 block">
                   Select Hour
@@ -401,17 +386,53 @@ function ArchivePageContent() {
                   </SelectContent>
                 </Select>
               </div>
-
             </div>
 
-            {/* Right column: playlist */}
+            {/* Right column: date picker (collapsed) + playlist */}
             <div className="flex-1 flex flex-col min-h-0">
-              <Label className="text-sm font-medium mb-2 block">
-                Playlist
-              </Label>
+              {/* Collapsed date picker */}
+              <div className="mb-2">
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {formatDate(selectedDate)}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-auto p-0"
+                    align="start"
+                    sideOffset={8}
+                  >
+                    <style jsx global>{`
+                      .dark button[data-selected-single="true"]:hover {
+                        background-color: var(--primary) !important;
+                        color: var(--primary-foreground) !important;
+                      }
+                    `}</style>
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={(date) => {
+                        if (date) {
+                          setSelectedDate(date);
+                          setCalendarOpen(false);
+                        }
+                      }}
+                      disabled={(date) => date > today || date < allowedStart}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Daily playlist grouped by show */}
               <div className="border dark:border-gray-700 rounded-md flex-1 overflow-hidden">
                 <PlaylistPanel
-                  entries={playlistEntries}
+                  shows={shows}
                   isLoading={playlistLoading}
                   error={playlistError}
                   activeEntryId={activeEntryId}
@@ -423,24 +444,25 @@ function ArchivePageContent() {
 
           {/* Playback controls */}
           <AudioPlayer
-        audioUrl={audioUrl}
-        isPlaying={isPlaying}
-        setIsPlaying={setIsPlaying}
-        selectedDate={selectedDate}
-        selectedHour={Number.parseInt(selectedHour)}
-        selectedMinute={Number.parseInt(selectedMinute)}
-        selectedSecond={Number.parseInt(selectedSecond)}
-        archiveSelected={archiveSelected}
-        onHourChange={handleHourChange}
-        onTimeUpdate={(minute: number, second: number) => {
-          setSelectedMinute(minute.toString());
-          setSelectedSecond(second.toString());
-          setCurrentPlaybackTime(minute * 60 + second);
-        }}
-        config={selectedConfig}
-        seekToSeconds={seekToSeconds}
-        seekRequestId={seekRequestId}
-      />
+            audioUrl={audioUrl}
+            isPlaying={isPlaying}
+            setIsPlaying={setIsPlaying}
+            selectedDate={selectedDate}
+            selectedHour={Number.parseInt(selectedHour)}
+            selectedMinute={Number.parseInt(selectedMinute)}
+            selectedSecond={Number.parseInt(selectedSecond)}
+            archiveSelected={archiveSelected}
+            onHourChange={handleHourChange}
+            onTimeUpdate={(minute: number, second: number) => {
+              setSelectedMinute(minute.toString());
+              setSelectedSecond(second.toString());
+              setCurrentPlaybackTime(minute * 60 + second);
+            }}
+            config={selectedConfig}
+            seekToSeconds={seekToSeconds}
+            seekRequestId={seekRequestId}
+            getToken={getToken}
+          />
         </CardContent>
       </Card>
     </div>
