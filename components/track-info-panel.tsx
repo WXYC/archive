@@ -53,37 +53,12 @@ export function TrackInfoPanel({ entry, onClose }: TrackInfoPanelProps) {
           )}
         </div>
 
-        {/* Metadata grid */}
+        {/* Metadata */}
         <div className="space-y-3 mb-4">
           {entry.labelName && (
             <MetadataRow label="Label" value={entry.labelName} />
           )}
-          {entry.metadata?.genre && (
-            <MetadataRow label="Genre" value={entry.metadata.genre} />
-          )}
-          {entry.metadata?.format && (
-            <MetadataRow label="Format" value={entry.metadata.format} />
-          )}
-          {entry.metadata?.callNumber && (
-            <MetadataRow label="Call Number" value={entry.metadata.callNumber} mono />
-          )}
         </div>
-
-        {/* Badges */}
-        {(entry.rotation || entry.request) && (
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {entry.rotation && (
-              <span className="text-xs bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded">
-                Rotation
-              </span>
-            )}
-            {entry.request && (
-              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded">
-                Request
-              </span>
-            )}
-          </div>
-        )}
 
         {/* External links */}
         {entry.metadata?.discogsUrl && (
