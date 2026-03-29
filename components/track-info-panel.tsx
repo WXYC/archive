@@ -9,7 +9,54 @@ interface TrackInfoPanelProps {
   onClose: () => void;
 }
 
+function buildSearchUrl(base: string, artist: string, song?: string): string {
+  const query = song ? `${artist} ${song}` : artist;
+  return `${base}${encodeURIComponent(query)}`;
+}
+
+interface StreamingService {
+  name: string;
+  url: string;
+  icon: string;
+}
+
+function getStreamingLinks(entry: ArchivePlaylistEntry): StreamingService[] {
+  const artist = entry.artistName;
+  const song = entry.songTitle;
+  if (!artist) return [];
+
+  const links: StreamingService[] = [];
+  const searchTerm = song || entry.releaseTitle || "";
+
+  if (searchTerm) {
+    links.push({
+      name: "Spotify",
+      url: buildSearchUrl("https://open.spotify.com/search/", artist, searchTerm),
+      icon: "spotify",
+    });
+    links.push({
+      name: "YouTube Music",
+      url: buildSearchUrl("https://music.youtube.com/search?q=", artist, searchTerm),
+      icon: "youtube",
+    });
+    links.push({
+      name: "Bandcamp",
+      url: buildSearchUrl("https://bandcamp.com/search?q=", artist, searchTerm),
+      icon: "bandcamp",
+    });
+    links.push({
+      name: "SoundCloud",
+      url: buildSearchUrl("https://soundcloud.com/search?q=", artist, searchTerm),
+      icon: "soundcloud",
+    });
+  }
+
+  return links;
+}
+
 export function TrackInfoPanel({ entry, onClose }: TrackInfoPanelProps) {
+  const streamingLinks = getStreamingLinks(entry);
+
   return (
     <div className="flex flex-col h-full">
       {/* Close button */}
@@ -60,17 +107,43 @@ export function TrackInfoPanel({ entry, onClose }: TrackInfoPanelProps) {
           )}
         </div>
 
+        {/* Streaming links */}
+        {streamingLinks.length > 0 && (
+          <div className="border-t dark:border-gray-700 pt-3 mb-4">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
+              Add it to your library
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {streamingLinks.map((service) => (
+                <a
+                  key={service.name}
+                  href={service.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-3 py-2 text-sm rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">{service.name}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* External links */}
         {entry.metadata?.discogsUrl && (
           <div className="border-t dark:border-gray-700 pt-3">
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">More Info</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
+              More Info
+            </p>
             <a
               href={entry.metadata.discogsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1"
+              className="flex items-center gap-2 px-3 py-2 text-sm rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-300 w-fit"
             >
-              Discogs <ExternalLink className="h-3 w-3" />
+              <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+              Discogs
             </a>
           </div>
         )}
@@ -79,13 +152,13 @@ export function TrackInfoPanel({ entry, onClose }: TrackInfoPanelProps) {
   );
 }
 
-function MetadataRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function MetadataRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between items-baseline gap-2">
       <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide flex-shrink-0">
         {label}
       </span>
-      <span className={`text-sm text-gray-900 dark:text-gray-100 text-right ${mono ? "font-mono" : ""}`}>
+      <span className="text-sm text-gray-900 dark:text-gray-100 text-right">
         {value}
       </span>
     </div>
