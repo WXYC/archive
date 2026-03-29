@@ -1,7 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 
+// Cloudflare Workers in Flexible SSL mode connect to origins over HTTP, so
+// nginx on api.wxyc.org would 301-redirect an HTTPS URL back to HTTPS in an
+// infinite loop. Using HTTP directly avoids the redirect since that's what
+// Cloudflare actually sends to the origin.
 const UPSTREAM_AUTH_URL =
-  process.env.BETTER_AUTH_URL || "https://api.wxyc.org/auth";
+  process.env.BETTER_AUTH_URL || "http://api.wxyc.org/auth";
 
 /** Hop-by-hop headers that must not be forwarded to the upstream server. */
 const EXCLUDED_REQUEST_HEADERS = new Set([

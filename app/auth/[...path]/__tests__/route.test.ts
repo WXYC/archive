@@ -63,7 +63,7 @@ describe("GET /auth/[...path]", () => {
     await GET(makeRequest("/get-session"));
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.wxyc.org/auth/get-session",
+      "http://api.wxyc.org/auth/get-session",
       expect.objectContaining({ method: "GET" })
     );
   });
@@ -74,7 +74,7 @@ describe("GET /auth/[...path]", () => {
     await GET(makeRequest("/get-session?foo=bar"));
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.wxyc.org/auth/get-session?foo=bar",
+      "http://api.wxyc.org/auth/get-session?foo=bar",
       expect.anything()
     );
   });
@@ -147,7 +147,7 @@ describe("POST /auth/[...path]", () => {
     );
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.wxyc.org/auth/sign-in/email",
+      "http://api.wxyc.org/auth/sign-in/email",
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -160,7 +160,7 @@ describe("OPTIONS /auth/[...path]", () => {
     const response = await OPTIONS(makeRequest("/sign-in/email", { method: "OPTIONS" }));
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.wxyc.org/auth/sign-in/email",
+      "http://api.wxyc.org/auth/sign-in/email",
       expect.objectContaining({ method: "OPTIONS" })
     );
     expect(response.status).toBe(204);
