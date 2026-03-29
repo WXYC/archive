@@ -87,6 +87,14 @@ export function useDailyPlaylist(
               callNumber: null,
               libraryUrl: null,
               discogsUrl: null,
+              releaseYear: null,
+              artistBio: null,
+              wikipediaUrl: null,
+              spotifyUrl: null,
+              appleMusicUrl: null,
+              youtubeMusicUrl: null,
+              bandcampUrl: null,
+              soundcloudUrl: null,
             };
           }
         }
@@ -107,6 +115,14 @@ export function useDailyPlaylist(
                         callNumber: artworkData.callNumber,
                         libraryUrl: artworkData.libraryUrl,
                         discogsUrl: artworkData.discogsUrl,
+                        releaseYear: artworkData.releaseYear,
+                        artistBio: artworkData.artistBio,
+                        wikipediaUrl: artworkData.wikipediaUrl,
+                        spotifyUrl: artworkData.spotifyUrl,
+                        appleMusicUrl: artworkData.appleMusicUrl,
+                        youtubeMusicUrl: artworkData.youtubeMusicUrl,
+                        bandcampUrl: artworkData.bandcampUrl,
+                        soundcloudUrl: artworkData.soundcloudUrl,
                       },
                     }
                   : e
