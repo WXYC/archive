@@ -1,9 +1,15 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { PlaylistItem } from "@/components/playlist-item";
+import { TrackInfoPanel } from "@/components/track-info-panel";
 import { getHourLabel } from "@/lib/utils";
 import type { DailyPlaylistEntry, ShowBlock } from "@/lib/types/playlist";
 
@@ -29,6 +35,8 @@ export function PlaylistPanel({
   onEntryClick,
 }: PlaylistPanelProps) {
   const activeRef = useRef<HTMLDivElement>(null);
+  const [infoEntry, setInfoEntry] = useState<DailyPlaylistEntry | null>(null);
+  const [mobileInfoEntry, setMobileInfoEntry] = useState<DailyPlaylistEntry | null>(null);
 
   // Auto-scroll to keep active entry visible
   useEffect(() => {
@@ -36,6 +44,17 @@ export function PlaylistPanel({
       activeRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [activeEntryId]);
+
+  // Close info panel when shows change (date change)
+  useEffect(() => {
+    setInfoEntry(null);
+    setMobileInfoEntry(null);
+  }, [shows]);
+
+  const handleInfoClick = (entry: DailyPlaylistEntry) => {
+    // Toggle: if same entry, close; otherwise open new
+    setInfoEntry((prev) => (prev?.id === entry.id ? null : entry));
+  };
 
   if (isLoading) {
     return (
@@ -75,7 +94,7 @@ export function PlaylistPanel({
     );
   }
 
-  return (
+  const playlistContent = (
     <ScrollArea className="h-full">
       <div className="p-2">
         {shows.map((show) => {
@@ -115,11 +134,46 @@ export function PlaylistPanel({
                     key={entry.id}
                     ref={entry.id === activeEntryId ? activeRef : undefined}
                   >
-                    <PlaylistItem
-                      entry={entry}
-                      isActive={entry.id === activeEntryId}
-                      onClick={() => onEntryClick(entry)}
-                    />
+                    {/* Desktop: info button triggers side panel */}
+                    <div className="hidden sm:block">
+                      <PlaylistItem
+                        entry={entry}
+                        isActive={entry.id === activeEntryId}
+                        onClick={() => onEntryClick(entry)}
+                        onInfoClick={() => handleInfoClick(entry)}
+                      />
+                    </div>
+
+                    {/* Mobile: info button triggers popover */}
+                    <div className="sm:hidden">
+                      <Popover
+                        open={mobileInfoEntry?.id === entry.id}
+                        onOpenChange={(open) =>
+                          setMobileInfoEntry(open ? entry : null)
+                        }
+                      >
+                        <PopoverTrigger asChild>
+                          <div>
+                            <PlaylistItem
+                              entry={entry}
+                              isActive={entry.id === activeEntryId}
+                              onClick={() => onEntryClick(entry)}
+                              onInfoClick={() =>
+                                setMobileInfoEntry((prev) =>
+                                  prev?.id === entry.id ? null : entry
+                                )
+                              }
+                            />
+                          </div>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-0" side="top" align="center">
+                          <TrackInfoPanel
+                            entry={entry}
+                            onClose={() => setMobileInfoEntry(null)}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -128,5 +182,24 @@ export function PlaylistPanel({
         })}
       </div>
     </ScrollArea>
+  );
+
+  return (
+    <div className="flex h-full">
+      {/* Playlist */}
+      <div className={`flex-1 min-w-0 ${infoEntry ? "hidden sm:block" : ""}`}>
+        {playlistContent}
+      </div>
+
+      {/* Desktop info panel (second column) */}
+      {infoEntry && (
+        <div className="hidden sm:block w-[280px] flex-shrink-0 border-l dark:border-gray-700 bg-white dark:bg-gray-900">
+          <TrackInfoPanel
+            entry={infoEntry}
+            onClose={() => setInfoEntry(null)}
+          />
+        </div>
+      )}
+    </div>
   );
 }

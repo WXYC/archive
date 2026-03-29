@@ -101,11 +101,12 @@ describe("PlaylistPanel", () => {
       />
     );
 
-    expect(screen.getByText("DJ Biscuit")).toBeInTheDocument();
-    expect(screen.getByText("Stereolab")).toBeInTheDocument();
-    expect(screen.getByText("Ping Pong")).toBeInTheDocument();
-    expect(screen.getByText("Cat Power")).toBeInTheDocument();
-    expect(screen.getByText("Metal Heart")).toBeInTheDocument();
+    // Each entry renders twice (desktop + mobile variant), so use getAllByText
+    expect(screen.getAllByText("DJ Biscuit").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Stereolab").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Ping Pong").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Cat Power").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Metal Heart").length).toBeGreaterThan(0);
   });
 
   it("calls onEntryClick when an entry is clicked", async () => {
@@ -127,7 +128,8 @@ describe("PlaylistPanel", () => {
       />
     );
 
-    await user.click(screen.getByText("Test Song"));
+    // Both desktop + mobile renders exist; click the first one
+    await user.click(screen.getAllByText("Test Song")[0]);
     expect(onEntryClick).toHaveBeenCalledWith(entry);
   });
 

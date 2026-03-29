@@ -102,20 +102,31 @@ describe("PlaylistItem", () => {
     expect(screen.getByText("Unknown Artist")).toBeInTheDocument();
   });
 
-  it("renders info button with info icon", () => {
+  it("renders info button when onInfoClick is provided", () => {
     const { container } = render(
       <PlaylistItem
-        entry={createEntry({
-          releaseTitle: "On Your Own Love Again",
-          labelName: "Drag City",
-        })}
+        entry={createEntry()}
+        isActive={false}
+        onClick={vi.fn()}
+        onInfoClick={vi.fn()}
+      />
+    );
+
+    const infoIcon = container.querySelector("svg.lucide-info");
+    expect(infoIcon).toBeInTheDocument();
+  });
+
+  it("does not render info button when onInfoClick is not provided", () => {
+    const { container } = render(
+      <PlaylistItem
+        entry={createEntry()}
         isActive={false}
         onClick={vi.fn()}
       />
     );
 
     const infoIcon = container.querySelector("svg.lucide-info");
-    expect(infoIcon).toBeInTheDocument();
+    expect(infoIcon).not.toBeInTheDocument();
   });
 
   it("shows rotation badge when entry has rotation", () => {
