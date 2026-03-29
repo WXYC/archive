@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import { formatDate, getArchiveUrl, getHourLabel } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import AudioPlayer from "@/components/audio-player";
-import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { KeyboardShortcutsDialog } from "@/components/keyboard-shortcuts-dialog";
 import { LoginDialog } from "@/components/login-dialog";
@@ -365,38 +364,15 @@ function ArchivePageContent() {
             {selectedConfig.dateRange.description}
           </CardDescription>
         </CardHeader>
-        <CardContent className="py-2 px-6 sm:py-6 flex-1 flex flex-col min-h-0">
-          <div className="flex flex-col lg:flex-row lg:items-stretch gap-6 flex-1 min-h-0">
-            {/* Left column: hour picker */}
-            <div className="lg:w-[200px] lg:flex-shrink-0 flex flex-col gap-6">
-              <div>
-                <Label className="text-sm font-medium mb-2 block">
-                  Select Hour
-                </Label>
-                <Select value={selectedHour} onValueChange={setSelectedHour}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select hour" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <SelectItem key={i} value={i.toString()}>
-                        {getHourLabel(i)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Right column: date picker (collapsed) + playlist */}
-            <div className="flex-1 flex flex-col min-h-0">
-              {/* Collapsed date picker */}
-              <div className="mb-2">
-                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
+        <CardContent className="p-6 flex-1 flex flex-col min-h-0">
+          <div className="flex flex-col flex-1 min-h-0">
+            {/* Date picker + hour picker row */}
+            <div className="flex gap-2 mb-4">
+              <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="flex-1 justify-start text-left font-normal"
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {formatDate(selectedDate)}
@@ -427,18 +403,30 @@ function ArchivePageContent() {
                     />
                   </PopoverContent>
                 </Popover>
-              </div>
 
-              {/* Daily playlist grouped by show */}
-              <div className="border dark:border-gray-700 rounded-md flex-1 overflow-hidden">
-                <PlaylistPanel
-                  shows={shows}
-                  isLoading={playlistLoading}
-                  error={playlistError}
-                  activeEntryId={activeEntryId}
-                  onEntryClick={handlePlaylistEntryClick}
-                />
-              </div>
+              <Select value={selectedHour} onValueChange={setSelectedHour}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Select hour" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <SelectItem key={i} value={i.toString()}>
+                      {getHourLabel(i)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Daily playlist grouped by show */}
+            <div className="border dark:border-gray-700 rounded-md flex-1 overflow-hidden mb-4">
+              <PlaylistPanel
+                shows={shows}
+                isLoading={playlistLoading}
+                error={playlistError}
+                activeEntryId={activeEntryId}
+                onEntryClick={handlePlaylistEntryClick}
+              />
             </div>
           </div>
 
