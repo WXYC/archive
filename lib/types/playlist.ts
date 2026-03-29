@@ -50,6 +50,14 @@ export interface ArchivePlaylistEntry {
     callNumber: string | null;
     libraryUrl: string | null;
     discogsUrl: string | null;
+    releaseYear: number | null;
+    artistBio: string | null;
+    wikipediaUrl: string | null;
+    spotifyUrl: string | null;
+    appleMusicUrl: string | null;
+    youtubeMusicUrl: string | null;
+    bandcampUrl: string | null;
+    soundcloudUrl: string | null;
   };
 }
 
