@@ -52,10 +52,12 @@ export function LoginDialog() {
     );
   }
 
-  if (isAuthenticated && user) {
+  if (isAuthenticated) {
     return (
       <div className="flex items-center gap-3">
-        <span className="text-sm text-muted-foreground">{user.name}</span>
+        {user && (
+          <span className="text-sm text-muted-foreground">{user.name}</span>
+        )}
         <Button variant="outline" onClick={handleLogout}>
           Sign Out
         </Button>
