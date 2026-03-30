@@ -63,7 +63,7 @@ describe("GET /auth/[...path]", () => {
     await GET(makeRequest("/get-session"));
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://api.wxyc.org/auth/get-session",
+      "https://api.wxyc.org/auth/get-session",
       expect.objectContaining({ method: "GET" })
     );
   });
@@ -74,7 +74,7 @@ describe("GET /auth/[...path]", () => {
     await GET(makeRequest("/get-session?foo=bar"));
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://api.wxyc.org/auth/get-session?foo=bar",
+      "https://api.wxyc.org/auth/get-session?foo=bar",
       expect.anything()
     );
   });
@@ -147,7 +147,7 @@ describe("POST /auth/[...path]", () => {
     );
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://api.wxyc.org/auth/sign-in/email",
+      "https://api.wxyc.org/auth/sign-in/email",
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -160,10 +160,77 @@ describe("OPTIONS /auth/[...path]", () => {
     const response = await OPTIONS(makeRequest("/sign-in/email", { method: "OPTIONS" }));
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "http://api.wxyc.org/auth/sign-in/email",
+      "https://api.wxyc.org/auth/sign-in/email",
       expect.objectContaining({ method: "OPTIONS" })
     );
     expect(response.status).toBe(204);
+  });
+});
+
+describe("redirect handling", () => {
+  it("follows same-origin redirects server-side", async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(null, {
+        status: 301,
+        headers: { Location: "https://api.wxyc.org/auth/sign-in/email" },
+      })
+    );
+    mockUpstream({ body: '{"user":{"id":"1"}}' });
+
+    const response = await POST(
+      makeRequest("/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "dj@wxyc.org", password: "pw" }),
+      })
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(200);
+  });
+
+  it("passes through cross-origin redirects to the client", async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { Location: "https://accounts.google.com/o/oauth2/auth" },
+      })
+    );
+
+    const response = await GET(makeRequest("/callback/google"));
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "https://accounts.google.com/o/oauth2/auth"
+    );
+  });
+
+  it("stops after MAX_REDIRECTS to prevent loops", async () => {
+    for (let i = 0; i < 5; i++) {
+      mockFetch.mockResolvedValueOnce(
+        new Response(null, {
+          status: 301,
+          headers: { Location: "https://api.wxyc.org/auth/loop" },
+        })
+      );
+    }
+
+    const response = await GET(makeRequest("/loop"));
+
+    // 1 initial + 3 follows = 4 fetches, then returns the redirect
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(response.status).toBe(301);
+  });
+
+  it("sends x-forwarded-proto: https to upstream", async () => {
+    mockUpstream();
+
+    await GET(makeRequest("/get-session"));
+
+    const [, init] = mockFetch.mock.calls[0];
+    const forwarded = normalizeHeaders(init.headers);
+    expect(forwarded["x-forwarded-proto"]).toBe("https");
   });
 });
 
