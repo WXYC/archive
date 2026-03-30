@@ -128,6 +128,23 @@ describe("GET /auth/[...path]", () => {
     const responseHeaders = normalizeHeaders(response.headers);
     expect(responseHeaders["x-custom-response"]).toBe("from-upstream");
   });
+
+  it("strips upstream CORS headers from proxied responses", async () => {
+    mockUpstream({
+      headers: {
+        "Access-Control-Allow-Origin": "https://dj.wxyc.org",
+        "Access-Control-Allow-Credentials": "true",
+        "X-Powered-By": "Express",
+      },
+    });
+
+    const response = await GET(makeRequest("/get-session"));
+
+    const responseHeaders = normalizeHeaders(response.headers);
+    expect(responseHeaders["access-control-allow-origin"]).toBeUndefined();
+    expect(responseHeaders["access-control-allow-credentials"]).toBeUndefined();
+    expect(responseHeaders["x-powered-by"]).toBe("Express");
+  });
 });
 
 describe("POST /auth/[...path]", () => {

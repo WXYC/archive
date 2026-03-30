@@ -6,6 +6,8 @@ const UPSTREAM_AUTH_URL =
 /** Hop-by-hop headers that must not be forwarded to the upstream server. */
 const EXCLUDED_REQUEST_HEADERS = new Set([
   "host",
+  "origin",
+  "referer",
   "connection",
   "keep-alive",
   "transfer-encoding",
@@ -16,7 +18,11 @@ const EXCLUDED_REQUEST_HEADERS = new Set([
   "proxy-connection",
 ]);
 
-/** Hop-by-hop headers that must not be returned to the client. */
+/**
+ * Headers stripped from upstream responses. Includes hop-by-hop headers and the
+ * upstream's CORS headers, which are irrelevant for same-origin proxy responses
+ * and would confuse the browser if the upstream allows a different origin.
+ */
 const EXCLUDED_RESPONSE_HEADERS = new Set([
   "connection",
   "keep-alive",
@@ -24,6 +30,12 @@ const EXCLUDED_RESPONSE_HEADERS = new Set([
   "te",
   "trailer",
   "upgrade",
+  "access-control-allow-origin",
+  "access-control-allow-credentials",
+  "access-control-allow-methods",
+  "access-control-allow-headers",
+  "access-control-expose-headers",
+  "access-control-max-age",
 ]);
 
 /**
