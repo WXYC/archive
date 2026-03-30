@@ -7,7 +7,6 @@ const UPSTREAM_AUTH_URL =
 const EXCLUDED_REQUEST_HEADERS = new Set([
   "host",
   "origin",
-  "referer",
   "connection",
   "keep-alive",
   "transfer-encoding",
@@ -52,8 +51,10 @@ async function proxyRequest(request: NextRequest): Promise<NextResponse> {
   let url = `${UPSTREAM_AUTH_URL}${upstreamPath}${request.nextUrl.search}`;
   const upstreamHost = new URL(UPSTREAM_AUTH_URL).host;
 
+  const upstreamOrigin = new URL(UPSTREAM_AUTH_URL).origin;
   const headers: Record<string, string> = {
     "x-forwarded-proto": "https",
+    origin: upstreamOrigin,
   };
   request.headers.forEach((value, key) => {
     if (!EXCLUDED_REQUEST_HEADERS.has(key.toLowerCase())) {
