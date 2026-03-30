@@ -168,6 +168,30 @@ describe("OPTIONS /auth/[...path]", () => {
 });
 
 describe("redirect handling", () => {
+  it("follows scheme-change redirects (http→https) for the same host", async () => {
+    // Simulate Cloudflare "Always Use HTTPS" redirecting http→https.
+    // The upstream env var may use http:// but the redirect Location is https://.
+    // The proxy must follow this because the host is the same.
+    mockFetch.mockResolvedValueOnce(
+      new Response(null, {
+        status: 301,
+        headers: { Location: "http://api.wxyc.org/auth/sign-in/email" },
+      })
+    );
+    mockUpstream({ body: '{"user":{"id":"1"}}' });
+
+    const response = await POST(
+      makeRequest("/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "dj@wxyc.org", password: "pw" }),
+      })
+    );
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(200);
+  });
+
   it("follows same-origin redirects server-side", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(null, {

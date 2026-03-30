@@ -38,7 +38,7 @@ const MAX_REDIRECTS = 3;
 async function proxyRequest(request: NextRequest): Promise<NextResponse> {
   const upstreamPath = request.nextUrl.pathname.replace(/^\/auth/, "");
   let url = `${UPSTREAM_AUTH_URL}${upstreamPath}${request.nextUrl.search}`;
-  const upstreamOrigin = new URL(UPSTREAM_AUTH_URL).origin;
+  const upstreamHost = new URL(UPSTREAM_AUTH_URL).host;
 
   const headers: Record<string, string> = {
     "x-forwarded-proto": "https",
@@ -72,7 +72,7 @@ async function proxyRequest(request: NextRequest): Promise<NextResponse> {
         const location = upstreamResponse.headers.get("location");
         if (location) {
           const resolved = new URL(location, url);
-          if (resolved.origin === upstreamOrigin) {
+          if (resolved.host === upstreamHost) {
             url = resolved.href;
             continue;
           }
