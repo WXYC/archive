@@ -39,6 +39,8 @@ jobs:
       - name: Build for Cloudflare Workers
         run: npx opennextjs-cloudflare build
         env:
+          NEXT_PUBLIC_AUTH_USERNAME: ${{ vars.NEXT_PUBLIC_AUTH_USERNAME }}
+          NEXT_PUBLIC_AUTH_PASSWORD: ${{ vars.NEXT_PUBLIC_AUTH_PASSWORD }}
           NEXT_PUBLIC_BETTER_AUTH_URL: ${{ vars.NEXT_PUBLIC_BETTER_AUTH_URL }}
           BETTER_AUTH_URL: ${{ vars.BETTER_AUTH_URL }}
           NEXT_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}

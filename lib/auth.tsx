@@ -41,16 +41,30 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export { DJ_ROLES, isDJRole };
 
+const SIMPLE_AUTH_KEY = "wxyc-archive-auth";
+const useSimpleAuth =
+  !!process.env.NEXT_PUBLIC_AUTH_USERNAME &&
+  !!process.env.NEXT_PUBLIC_AUTH_PASSWORD;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [simpleAuthed, setSimpleAuthed] = useState(false);
 
   const userRole = user?.role ?? null;
-  const isAuthenticated = isDJRole(userRole);
+  const isAuthenticated = useSimpleAuth
+    ? simpleAuthed
+    : isDJRole(userRole);
 
   // Check session on mount
   useEffect(() => {
+    if (useSimpleAuth) {
+      setSimpleAuthed(localStorage.getItem(SIMPLE_AUTH_KEY) === "true");
+      setIsLoading(false);
+      return;
+    }
+
     const checkSession = async () => {
       try {
         const { data } = await authClient.getSession();
@@ -70,6 +84,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (usernameOrEmail: string, password: string): Promise<LoginResult> => {
+      if (useSimpleAuth) {
+        if (
+          usernameOrEmail === process.env.NEXT_PUBLIC_AUTH_USERNAME &&
+          password === process.env.NEXT_PUBLIC_AUTH_PASSWORD
+        ) {
+          setSimpleAuthed(true);
+          localStorage.setItem(SIMPLE_AUTH_KEY, "true");
+          return { success: true };
+        }
+        return { success: false, error: "Invalid credentials" };
+      }
+
       try {
         // Determine if input is email or username
         const isEmail = usernameOrEmail.includes("@");
@@ -120,6 +146,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
+    if (useSimpleAuth) {
+      setSimpleAuthed(false);
+      localStorage.removeItem(SIMPLE_AUTH_KEY);
+      return;
+    }
+
     try {
       await authClient.signOut();
     } catch (error) {
@@ -131,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getToken = useCallback(async (): Promise<string | null> => {
+    if (useSimpleAuth) return null;
     if (!session) return null;
     return getJWTToken();
   }, [session]);
