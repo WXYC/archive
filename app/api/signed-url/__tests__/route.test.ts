@@ -29,7 +29,7 @@ vi.mock("@aws-sdk/client-s3", () => ({
 vi.mock("@/config/archive", () => ({
   archiveConfigs: {
     default: {
-      dateRange: { days: 14, description: "past 2 weeks" },
+      dateRange: { days: 30, description: "past month" },
     },
     dj: {
       dateRange: { days: 90, description: "past 3 months" },
@@ -123,10 +123,10 @@ describe("POST /api/signed-url", () => {
       expect(data.url).toBe("https://s3.example.com/signed-url");
     });
 
-    it("should deny access to files outside 14-day range", async () => {
-      // Create a date 30 days ago
+    it("should deny access to files outside 30-day range", async () => {
+      // Create a date 45 days ago
       const date = new Date();
-      date.setDate(date.getDate() - 30);
+      date.setDate(date.getDate() - 45);
       const year = date.getFullYear();
       const month = (date.getMonth() + 1).toString().padStart(2, "0");
       const day = date.getDate().toString().padStart(2, "0");
@@ -148,7 +148,7 @@ describe("POST /api/signed-url", () => {
         role: "dj",
       });
 
-      // Create a date 60 days ago (within 90 days, outside 14 days)
+      // Create a date 60 days ago (within 90 days, outside 30 days)
       const date = new Date();
       date.setDate(date.getDate() - 60);
       const year = date.getFullYear();
@@ -237,16 +237,16 @@ describe("POST /api/signed-url", () => {
   });
 
   describe("authenticated member access (non-DJ role)", () => {
-    it("should only allow 14-day access for member role", async () => {
+    it("should only allow 30-day access for member role", async () => {
       mockVerifyAuthHeader.mockResolvedValue({
         authenticated: true,
         payload: { sub: "user-1", role: "member" },
         role: "member",
       });
 
-      // Create a date 30 days ago (within 90 days but outside 14 days)
+      // Create a date 45 days ago (within 90 days but outside 30 days)
       const date = new Date();
-      date.setDate(date.getDate() - 30);
+      date.setDate(date.getDate() - 45);
       const year = date.getFullYear();
       const month = (date.getMonth() + 1).toString().padStart(2, "0");
       const day = date.getDate().toString().padStart(2, "0");
