@@ -7,8 +7,8 @@ export type ArchiveConfig = {
 
 export const defaultConfig: ArchiveConfig = {
   dateRange: {
-    days: 14,
-    description: "past two weeks",
+    days: 30,
+    description: "past month",
   },
 };
 

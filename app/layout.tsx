@@ -10,7 +10,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "WXYC Archive Player",
-  description: "Listen to WXYC programming archives from the past two weeks",
+  description: "Listen to WXYC programming archives from the past month",
 };
 
 export default function RootLayout({
