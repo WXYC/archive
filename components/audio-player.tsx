@@ -15,6 +15,7 @@ import {
 import { formatTime, getArchiveUrl } from "@/lib/utils";
 import { ArchiveConfig } from "@/config/archive";
 import { useAuth } from "@/lib/auth";
+import posthog from "posthog-js";
 import { ShareDialog } from "@/components/share-dialog";
 import {
   Tooltip,
@@ -112,6 +113,11 @@ export default function AudioPlayer({
     onHourChange(newHour, newDate);
   }, [selectedDate, selectedHour, config.dateRange.days, onHourChange]);
 
+  // Track the audio position before a slider drag begins
+  const seekStartRef = useRef<number | null>(null);
+
+  const archiveDateISO = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
+
   // Handle keyboard events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -137,9 +143,17 @@ export default function AudioPlayer({
               changeHour(-1);
             }
           } else if (audioRef.current && audioUrl) {
-            const newTime = Math.max(0, audioRef.current.currentTime - 5);
+            const fromTime = audioRef.current.currentTime;
+            const newTime = Math.max(0, fromTime - 5);
             audioRef.current.currentTime = newTime;
             setCurrentTime(newTime);
+            posthog.capture("archive_seek", {
+              seek_from_seconds: Math.round(fromTime),
+              seek_to_seconds: Math.round(newTime),
+              seek_source: "keyboard",
+              archive_date: archiveDateISO,
+              archive_hour: selectedHour,
+            });
           }
           break;
         case "ArrowRight":
@@ -149,12 +163,20 @@ export default function AudioPlayer({
               changeHour(1);
             }
           } else if (audioRef.current && audioUrl) {
+            const fromTime = audioRef.current.currentTime;
             const newTime = Math.min(
               audioRef.current.duration,
-              audioRef.current.currentTime + 5
+              fromTime + 5
             );
             audioRef.current.currentTime = newTime;
             setCurrentTime(newTime);
+            posthog.capture("archive_seek", {
+              seek_from_seconds: Math.round(fromTime),
+              seek_to_seconds: Math.round(newTime),
+              seek_source: "keyboard",
+              archive_date: archiveDateISO,
+              archive_hour: selectedHour,
+            });
           }
           break;
       }
@@ -162,7 +184,7 @@ export default function AudioPlayer({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [audioUrl, isLoading, togglePlayPause, archiveSelected, isTransitioning, changeHour]);
+  }, [audioUrl, isLoading, togglePlayPause, archiveSelected, isTransitioning, changeHour, archiveDateISO, selectedHour]);
 
   // Handle mute toggle
   const toggleMute = () => {
@@ -175,6 +197,10 @@ export default function AudioPlayer({
   // Handle seeking with debounce for mobile
   const handleSeek = (value: number[]) => {
     if (audioRef.current) {
+      // Record the position before the first move of a drag
+      if (seekStartRef.current === null) {
+        seekStartRef.current = audioRef.current.currentTime;
+      }
       const newTime = value[0];
       console.log("[Audio] Seeking:", {
         from: audioRef.current.currentTime,
@@ -194,6 +220,17 @@ export default function AudioPlayer({
         }
       });
     }
+  };
+
+  const handleSeekCommit = (value: number[]) => {
+    posthog.capture("archive_seek", {
+      seek_from_seconds: Math.round(seekStartRef.current ?? 0),
+      seek_to_seconds: Math.round(value[0]),
+      seek_source: "slider",
+      archive_date: archiveDateISO,
+      archive_hour: selectedHour,
+    });
+    seekStartRef.current = null;
   };
 
   // Preload the next hour's MP3 when approaching the end of the current one.
@@ -330,14 +367,23 @@ export default function AudioPlayer({
       audioRef.current &&
       audioRef.current.readyState >= 2
     ) {
+      const fromTime = audioRef.current.currentTime;
       audioRef.current.currentTime = seekToSeconds;
       setCurrentTime(seekToSeconds);
       onTimeUpdate(
         Math.floor(seekToSeconds / 60),
         Math.floor(seekToSeconds % 60)
       );
+      posthog.capture("archive_seek", {
+        seek_from_seconds: Math.round(fromTime),
+        seek_to_seconds: Math.round(seekToSeconds),
+        seek_source: "playlist_entry",
+        archive_date: archiveDateISO,
+        archive_hour: selectedHour,
+      });
     }
-  }, [seekRequestId]); // Only trigger on seekRequestId change
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only trigger on seekRequestId change
+  }, [seekRequestId]);
 
   // Handle loaded metadata
   const handleLoadedMetadata = () => {
@@ -430,6 +476,7 @@ export default function AudioPlayer({
                 max={duration}
                 step={1}
                 onValueChange={handleSeek}
+                onValueCommit={handleSeekCommit}
                 className="w-full"
               />
             </div>
@@ -501,6 +548,7 @@ export default function AudioPlayer({
                   max={duration}
                   step={1}
                   onValueChange={handleSeek}
+                  onValueCommit={handleSeekCommit}
                   className="flex-1"
                 />
                 <span className="text-sm text-gray-500 dark:text-gray-400 w-12 shrink-0">
