@@ -1,13 +1,6 @@
 name: Charset Corpus Drift
 
-# WX-1 M3.2 wiring. Calls the reusable workflow in @wxyc/shared to fail CI
-# when the published charset-torture.json no longer matches our pinned hash.
-# When the guard fails, response is one of:
-#   1. Bump tests/fixtures/charset-torture.json.sha256 to the new SHA, re-run
-#      the local round-trip suite (npm test), and PR.
-#   2. Freeze the pin for one release with a `# corpus-pin-frozen reason: ...`
-#      comment in the SHA file.
-# See WXYC/wxyc-shared README "Drift guard CI" for the full procedure.
+# Bump-or-freeze procedure: see WXYC/wxyc-shared README "Drift guard CI".
 
 on:
   pull_request:
