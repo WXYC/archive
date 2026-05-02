@@ -1,22 +1,5 @@
-/**
- * Charset-torture round-trip CI for the archive app's serialize/deserialize
- * surfaces.
- *
- * Implements WX-1.2.12 (Mojibake Prevention M2). Drives the cross-repo
- * `@wxyc/shared` corpus from `tests/fixtures/charset-torture.json` (pinned
- * via `charset-torture.json.sha256`; drift-guarded by the M3.2 workflow at
- * `.github/workflows/charset-corpus-drift.yml`).
- *
- * Two surfaces:
- *
- *  - **JWT payload** — sign each entry as a JWS claim with a locally-generated
- *    key pair and verify+decode, asserting byte equality. Catches future
- *    regressions where a `jose` upgrade or a custom claim mapper silently
- *    re-encodes string claims.
- *  - **URL query** — round-trip each entry through a `URLSearchParams` value,
- *    mirroring the share-dialog's timestamp-link pattern. Catches any future
- *    encoding-cycle bug if the share-dialog grows annotation fields.
- */
+// WX-1.2.12 detector: catches a future jose upgrade or share-link encoder
+// silently re-encoding string claims/params. See WXYC/docs#15.
 import * as jose from "jose";
 import { describe, expect, it, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
