@@ -52,13 +52,25 @@ export async function POST(request: Request) {
     parseInt(hour)
   );
 
-  // Verify JWT from Authorization header to determine access level
+  // Determine if user has DJ-level access. Two paths can grant it:
+  //   1. Simple-auth mode: the deployed bundle ships with a shared password
+  //      baked in (NEXT_PUBLIC_AUTH_PASSWORD). When the client is in that
+  //      mode it sends the password as the Bearer token, since better-auth
+  //      isn't producing a JWT for it.
+  //   2. Better-auth: a JWT with a DJ role claim.
   const authHeader = request.headers.get("Authorization");
-  const verifyResult = await verifyAuthHeader(authHeader);
+  const bearerToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+  const simpleAuthPassword = process.env.NEXT_PUBLIC_AUTH_PASSWORD;
+  const matchedSimpleAuth =
+    !!simpleAuthPassword && bearerToken === simpleAuthPassword;
 
-  // Determine if user has DJ-level access
-  const hasDJAccess =
-    verifyResult.authenticated && isDJRole(verifyResult.role);
+  let hasDJAccess = matchedSimpleAuth;
+  if (!hasDJAccess) {
+    const verifyResult = await verifyAuthHeader(authHeader);
+    hasDJAccess = verifyResult.authenticated && isDJRole(verifyResult.role);
+  }
 
   // Get appropriate date range based on authentication
   const config = hasDJAccess ? archiveConfigs.dj : archiveConfigs.default;
