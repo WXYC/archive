@@ -56,15 +56,19 @@ export async function POST(request: Request) {
   //   1. Simple-auth mode: the deployed bundle ships with a shared password
   //      baked in (NEXT_PUBLIC_AUTH_PASSWORD). When the client is in that
   //      mode it sends the password as the Bearer token, since better-auth
-  //      isn't producing a JWT for it.
+  //      isn't producing a JWT for it. The bypass is only honored when both
+  //      env vars are configured — mirrors the client-side useSimpleAuth check.
   //   2. Better-auth: a JWT with a DJ role claim.
   const authHeader = request.headers.get("Authorization");
   const bearerToken = authHeader?.startsWith("Bearer ")
     ? authHeader.slice(7)
     : null;
-  const simpleAuthPassword = process.env.NEXT_PUBLIC_AUTH_PASSWORD;
+  const simpleAuthConfigured =
+    !!process.env.NEXT_PUBLIC_AUTH_USERNAME &&
+    !!process.env.NEXT_PUBLIC_AUTH_PASSWORD;
   const matchedSimpleAuth =
-    !!simpleAuthPassword && bearerToken === simpleAuthPassword;
+    simpleAuthConfigured &&
+    bearerToken === process.env.NEXT_PUBLIC_AUTH_PASSWORD;
 
   let hasDJAccess = matchedSimpleAuth;
   if (!hasDJAccess) {

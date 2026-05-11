@@ -167,10 +167,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // The server route recognizes the simple-auth password as a Bearer
       // token and grants DJ-range access. Without this, simple-auth users
       // see the 90-day calendar but the server refuses anything past the
-      // public window.
-      return simpleAuthed
-        ? (process.env.NEXT_PUBLIC_AUTH_PASSWORD ?? null)
-        : null;
+      // public window. `useSimpleAuth` already proves the env var is set.
+      return simpleAuthed ? process.env.NEXT_PUBLIC_AUTH_PASSWORD! : null;
     }
     if (!session) return null;
     return getJWTToken();
