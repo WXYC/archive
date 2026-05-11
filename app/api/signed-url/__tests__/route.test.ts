@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock the JWT utils
 const mockVerifyAuthHeader = vi.fn();
@@ -298,6 +298,77 @@ describe("POST /api/signed-url", () => {
       await callRoute({ key });
 
       expect(mockVerifyAuthHeader).toHaveBeenCalledWith(null);
+    });
+  });
+
+  // The deployed bundle ships with NEXT_PUBLIC_AUTH_USERNAME/PASSWORD baked in,
+  // which puts every user on the simple-auth code path. That path doesn't
+  // produce a JWT, so without this bypass the server treats authenticated
+  // users as anonymous and refuses anything older than the public window.
+  describe("simple-auth bearer bypass", () => {
+    beforeEach(() => {
+      vi.stubEnv("NEXT_PUBLIC_AUTH_PASSWORD", "shared-archive-password");
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    function keyForDaysAgo(daysAgo: number): string {
+      const date = new Date();
+      date.setDate(date.getDate() - daysAgo);
+      const year = date.getFullYear();
+      const month = (date.getMonth() + 1).toString().padStart(2, "0");
+      const day = date.getDate().toString().padStart(2, "0");
+      return `${year}/${month}/${day}/${year}${month}${day}1200.mp3`;
+    }
+
+    it("grants DJ-range access when Bearer token matches the configured simple-auth password", async () => {
+      const response = await callRoute(
+        { key: keyForDaysAgo(60) },
+        "Bearer shared-archive-password"
+      );
+
+      expect(response.status).toBe(200);
+      const data = await response.json();
+      expect(data.url).toBe("https://s3.example.com/signed-url");
+      expect(mockVerifyAuthHeader).not.toHaveBeenCalled();
+    });
+
+    it("still enforces the 90-day cap under simple-auth", async () => {
+      const response = await callRoute(
+        { key: keyForDaysAgo(100) },
+        "Bearer shared-archive-password"
+      );
+
+      expect(response.status).toBe(403);
+    });
+
+    it("falls back to JWT verification when Bearer token does not match", async () => {
+      mockVerifyAuthHeader.mockResolvedValue({
+        authenticated: false,
+        error: "Invalid signature",
+      });
+
+      const response = await callRoute(
+        { key: keyForDaysAgo(60) },
+        "Bearer some-other-token"
+      );
+
+      expect(response.status).toBe(403);
+      expect(mockVerifyAuthHeader).toHaveBeenCalledWith("Bearer some-other-token");
+    });
+
+    it("does not grant access when env var is empty, even if Bearer token is empty", async () => {
+      vi.stubEnv("NEXT_PUBLIC_AUTH_PASSWORD", "");
+      mockVerifyAuthHeader.mockResolvedValue({
+        authenticated: false,
+        error: "No authorization header",
+      });
+
+      const response = await callRoute({ key: keyForDaysAgo(60) }, "Bearer ");
+
+      expect(response.status).toBe(403);
     });
   });
 });
