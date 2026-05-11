@@ -307,6 +307,7 @@ describe("POST /api/signed-url", () => {
   // users as anonymous and refuses anything older than the public window.
   describe("simple-auth bearer bypass", () => {
     beforeEach(() => {
+      vi.stubEnv("NEXT_PUBLIC_AUTH_USERNAME", "wxycarch");
       vi.stubEnv("NEXT_PUBLIC_AUTH_PASSWORD", "shared-archive-password");
     });
 
@@ -370,5 +371,43 @@ describe("POST /api/signed-url", () => {
 
       expect(response.status).toBe(403);
     });
+
+    it("does not grant access when env var is set but USERNAME is missing (mirrors client useSimpleAuth)", async () => {
+      // PASSWORD is stubbed by the surrounding beforeEach. Explicitly clear
+      // USERNAME so the simple-auth pair is incomplete.
+      vi.stubEnv("NEXT_PUBLIC_AUTH_USERNAME", "");
+      mockVerifyAuthHeader.mockResolvedValue({
+        authenticated: false,
+        error: "Token verification failed",
+      });
+
+      const response = await callRoute(
+        { key: keyForDaysAgo(60) },
+        "Bearer shared-archive-password"
+      );
+
+      expect(response.status).toBe(403);
+    });
+
+    it.each([
+      ["lowercase prefix", "bearer shared-archive-password"],
+      ["no space after Bearer", "Bearershared-archive-password"],
+      ["different scheme", "Token shared-archive-password"],
+    ])(
+      "does not match Bearer with %s",
+      async (_label, malformedHeader) => {
+        mockVerifyAuthHeader.mockResolvedValue({
+          authenticated: false,
+          error: "Invalid authorization format",
+        });
+
+        const response = await callRoute(
+          { key: keyForDaysAgo(60) },
+          malformedHeader
+        );
+
+        expect(response.status).toBe(403);
+      }
+    );
   });
 });

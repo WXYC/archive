@@ -2,12 +2,22 @@
 // constant is evaluated at module load, so each test stubs the env vars,
 // resets the module registry, then dynamically imports the auth module.
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-// happy-dom v20 doesn't ship a localStorage by default; install an in-memory
-// shim so AuthProvider's simple-auth persistence path can run in tests.
+// happy-dom v20 doesn't ship a localStorage by default. Install an in-memory
+// shim only for the duration of this file so other test files (e.g. ones
+// asserting SSR-like absence of window.localStorage) aren't affected.
 const memoryStore = new Map<string, string>();
 const memoryLocalStorage = {
   getItem: (key: string) => memoryStore.get(key) ?? null,
@@ -23,14 +33,6 @@ const memoryLocalStorage = {
     return memoryStore.size;
   },
 };
-Object.defineProperty(globalThis, "localStorage", {
-  configurable: true,
-  value: memoryLocalStorage,
-});
-Object.defineProperty(window, "localStorage", {
-  configurable: true,
-  value: memoryLocalStorage,
-});
 
 const mockGetSession = vi.fn();
 const mockGetJWTToken = vi.fn();
@@ -94,6 +96,39 @@ async function renderWithSimpleAuth() {
 }
 
 describe("AuthProvider in simple-auth mode", () => {
+  const originalGlobalLocalStorage = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage"
+  );
+  const originalWindowLocalStorage = Object.getOwnPropertyDescriptor(
+    window,
+    "localStorage"
+  );
+
+  beforeAll(() => {
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: memoryLocalStorage,
+    });
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: memoryLocalStorage,
+    });
+  });
+
+  afterAll(() => {
+    if (originalGlobalLocalStorage) {
+      Object.defineProperty(globalThis, "localStorage", originalGlobalLocalStorage);
+    } else {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+    if (originalWindowLocalStorage) {
+      Object.defineProperty(window, "localStorage", originalWindowLocalStorage);
+    } else {
+      delete (window as unknown as { localStorage?: unknown }).localStorage;
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     memoryStore.clear();
@@ -109,6 +144,19 @@ describe("AuthProvider in simple-auth mode", () => {
     await renderWithSimpleAuth();
     await waitFor(() => {
       expect(screen.getByTestId("authenticated").textContent).toBe("no");
+    });
+  });
+
+  it("transitions to authenticated after successful login", async () => {
+    const user = userEvent.setup();
+    await renderWithSimpleAuth();
+
+    expect(screen.getByTestId("authenticated").textContent).toBe("no");
+
+    await user.click(screen.getByText("Login"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("authenticated").textContent).toBe("yes");
     });
   });
 
