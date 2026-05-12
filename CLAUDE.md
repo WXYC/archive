@@ -112,7 +112,7 @@ Runtime secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `BETTER_AUTH_JWKS
 - Auth context: `useAuth()` hook provides `isAuthenticated`, `login`, `logout`, `getToken`. DJ-level access is checked via `isDJRole()` from `@wxyc/shared/auth-client`.
 - S3 key format: `YYYY/MM/DD/YYYYMMDDHH00.mp3`
 - URL timestamp format: `?t=YYYYMMDDHHMMSS` (14 digits)
-- Node 22 in CI.
+- Node 24 in CI (Active LTS); pinned via `.nvmrc` and `engines.node`.
 
 ## Show-Based Daily Playback
 
