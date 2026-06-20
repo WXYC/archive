@@ -399,7 +399,7 @@ function ArchivePageContent() {
                         }
                       }}
                       disabled={(date) => date > today || date < allowedStart}
-                      initialFocus
+                      autoFocus
                     />
                   </PopoverContent>
                 </Popover>
