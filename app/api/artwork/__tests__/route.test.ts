@@ -4,11 +4,13 @@ import { POST } from "../route";
 const mockFetch = vi.fn();
 
 beforeEach(() => {
+  mockFetch.mockReset();
   global.fetch = mockFetch;
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 function makeRequest(body: Record<string, string>) {
@@ -119,6 +121,40 @@ describe("POST /api/artwork", () => {
     expect(data.artworkUrl).toBeNull();
 
     consoleSpy.mockRestore();
+  });
+
+  it("sends the LML_API_KEY bearer to library-metadata-lookup", async () => {
+    vi.stubEnv("LML_API_KEY", "test-lml-key");
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ results: [] }),
+    });
+
+    await POST(makeRequest({ artist: "Juana Molina", album: "DOGA" }));
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/lookup"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer test-lml-key",
+        }),
+      })
+    );
+  });
+
+  it("omits the Authorization header when LML_API_KEY is unset", async () => {
+    vi.stubEnv("LML_API_KEY", "");
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ results: [] }),
+    });
+
+    await POST(makeRequest({ artist: "Juana Molina", album: "DOGA" }));
+
+    const headers = mockFetch.mock.calls[0][1].headers;
+    expect(headers).not.toHaveProperty("Authorization");
   });
 
   it("accepts artist-only lookup", async () => {

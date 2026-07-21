@@ -59,10 +59,17 @@ export async function POST(request: Request) {
     );
   }
 
+  // Read at request time: on Cloudflare Workers, process.env is populated per
+  // request, so a module-scope read can miss the secret on cold start.
+  const lmlApiKey = process.env.LML_API_KEY;
+
   try {
     const lookupResponse = await fetch(`${LIBRARY_METADATA_URL}/lookup`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(lmlApiKey ? { Authorization: `Bearer ${lmlApiKey}` } : {}),
+      },
       body: JSON.stringify({
         artist: artist || undefined,
         album: album || undefined,
