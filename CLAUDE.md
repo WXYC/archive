@@ -71,6 +71,7 @@ See `.env.example`. Key variables:
 - `BETTER_AUTH_URL` -- server-side auth proxy destination (used by next.config.ts rewrites)
 - `NEXT_PUBLIC_BETTER_AUTH_URL` -- client-side auth URL (baked into bundle)
 - `BETTER_AUTH_JWKS_URL` -- JWKS endpoint for JWT verification
+- `LML_API_KEY` -- bearer token for library-metadata-lookup artwork enrichment (org-wide shared key; LML returns 401 without it and artwork lookups silently come back empty)
 
 ## Testing
 
@@ -101,7 +102,7 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 1. **test** job: `npm ci`, `tsc --noEmit`, `npm test`
 2. **build-and-deploy** job: OpenNext build, then `wrangler deploy` on push to `main`
 
-Runtime secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `BETTER_AUTH_JWKS_URL`, etc.) are set on the Cloudflare Worker directly, not in GitHub.
+Runtime secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `BETTER_AUTH_JWKS_URL`, `LML_API_KEY`, etc.) are set on the Cloudflare Worker directly, not in GitHub.
 
 ## Code Conventions
 
