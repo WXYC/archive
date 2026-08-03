@@ -17,6 +17,11 @@ updates:
       # this and upgrade TypeScript as a tracked change once the toolchain supports TS7.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # Hold ESLint at v9: eslint-config-next 16 bundles eslint-plugin-react 7.37.5,
+      # whose eslint peer caps at ^9.7 and which crashes on eslint 10 (it calls the
+      # removed context.getFilename() during React-version detection). No released
+      # eslint-plugin-react supports eslint 10 yet (checked 2026-08-03). Lift this once
+      # eslint-plugin-react ships eslint 10 support.
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
 
