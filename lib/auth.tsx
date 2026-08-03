@@ -14,6 +14,7 @@ import {
   DJ_ROLES,
 } from "@wxyc/shared/auth-client";
 import type { Session } from "@wxyc/shared/auth-client";
+import { decodeJwt } from "jose";
 
 // Extended user type with custom role field
 type User = {
@@ -46,16 +47,36 @@ const useSimpleAuth =
   !!process.env.NEXT_PUBLIC_AUTH_USERNAME &&
   !!process.env.NEXT_PUBLIC_AUTH_PASSWORD;
 
+/**
+ * Resolve the WXYC station role (dj, musicDirector, stationManager, member,
+ * ...) from the better-auth JWT `role` claim. This is distinct from
+ * `session.user.role`, which is the better-auth admin-plugin role and is
+ * null for plain DJs. The JWT is decoded client-side without signature
+ * verification purely to gate UI state; the server independently re-verifies
+ * the JWT (see lib/jwt-utils.ts) before honoring any download request.
+ */
+async function fetchStationRole(): Promise<string | null> {
+  const token = await getJWTToken();
+  if (!token) return null;
+
+  try {
+    const payload = decodeJwt(token);
+    return (payload.role as string) ?? null;
+  } catch (error) {
+    console.error("Failed to decode JWT for station role:", error);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [simpleAuthed, setSimpleAuthed] = useState(false);
+  const [stationRole, setStationRole] = useState<string | null>(null);
 
-  const userRole = user?.role ?? null;
-  const isAuthenticated = useSimpleAuth
-    ? simpleAuthed
-    : isDJRole(userRole);
+  const userRole = stationRole;
+  const isAuthenticated = useSimpleAuth ? simpleAuthed : isDJRole(stationRole);
 
   // Check session on mount
   useEffect(() => {
@@ -71,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data?.session && data?.user) {
           setSession(data.session);
           setUser(data.user as User);
+          setStationRole(await fetchStationRole());
         }
       } catch (error) {
         console.error("Failed to check session:", error);
@@ -122,8 +144,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const userData = sessionResult.data.user as User;
           setUser(userData);
 
-          // Check if user has DJ role
-          if (!isDJRole(userData.role)) {
+          // Gate on the WXYC station role from the JWT claim, not the
+          // admin-plugin session.user.role (null for a plain dj). See
+          // fetchStationRole above; mirrors the server signed-url gate.
+          const role = await fetchStationRole();
+          setStationRole(role);
+
+          if (!isDJRole(role)) {
             return {
               success: false,
               error: "Your account does not have archive access",
@@ -159,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setSession(null);
       setUser(null);
+      setStationRole(null);
     }
   }, []);
 

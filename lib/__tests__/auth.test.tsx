@@ -27,6 +27,18 @@ vi.mock("@wxyc/shared/auth-client", () => ({
   DJ_ROLES: ["dj", "musicDirector", "stationManager"],
 }));
 
+// Build a realistic (unsigned) JWT string whose payload decodes via jose's
+// decodeJwt. The signature segment is not verified client-side, so any
+// placeholder works here.
+function b64url(obj: Record<string, unknown>): string {
+  return Buffer.from(JSON.stringify(obj)).toString("base64url");
+}
+
+function fakeJwt(payload: Record<string, unknown>): string {
+  const header = { alg: "RS256", typ: "JWT" };
+  return `${b64url(header)}.${b64url(payload)}.sig`;
+}
+
 // Test component that uses the auth hook
 function TestComponent() {
   const {
@@ -107,13 +119,16 @@ describe("AuthProvider", () => {
       });
     });
 
-    it("should populate session when user is logged in", async () => {
+    it("should authenticate a plain DJ whose session.user.role is null but whose JWT station role is dj", async () => {
+      // This mirrors production: the admin-plugin `user.role` is null for a
+      // plain dj, and the real station role only lives in the JWT claim.
       mockGetSession.mockResolvedValue({
         data: {
           session: { id: "session-1" },
-          user: { id: "user-1", name: "Test DJ", role: "dj" },
+          user: { id: "user-1", name: "Test DJ", role: null },
         },
       });
+      mockGetJWTToken.mockResolvedValue(fakeJwt({ sub: "user-1", role: "dj" }));
 
       render(
         <AuthProvider>
@@ -130,13 +145,41 @@ describe("AuthProvider", () => {
       });
     });
 
-    it("should not be authenticated without DJ role", async () => {
+    it("should authenticate a stationManager whose session.user.role is the admin-plugin role but whose JWT station role is stationManager", async () => {
       mockGetSession.mockResolvedValue({
         data: {
           session: { id: "session-1" },
-          user: { id: "user-1", name: "Member", role: "member" },
+          user: { id: "user-1", name: "Station Manager", role: "admin" },
         },
       });
+      mockGetJWTToken.mockResolvedValue(
+        fakeJwt({ sub: "user-1", role: "stationManager" })
+      );
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("user-role").textContent).toBe(
+          "stationManager"
+        );
+        expect(screen.getByTestId("authenticated").textContent).toBe(
+          "authenticated"
+        );
+      });
+    });
+
+    it("should not be authenticated for a non-DJ member with a member JWT role", async () => {
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: { id: "session-1" },
+          user: { id: "user-1", name: "Member", role: null },
+        },
+      });
+      mockGetJWTToken.mockResolvedValue(fakeJwt({ sub: "user-1", role: "member" }));
 
       render(
         <AuthProvider>
@@ -149,6 +192,63 @@ describe("AuthProvider", () => {
           "not-authenticated"
         );
       });
+    });
+
+    it("should not be authenticated when there is no JWT token", async () => {
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: { id: "session-1" },
+          user: { id: "user-1", name: "Member", role: null },
+        },
+      });
+      mockGetJWTToken.mockResolvedValue(null);
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("authenticated").textContent).toBe(
+          "not-authenticated"
+        );
+      });
+    });
+
+    it("should not be authenticated when the JWT is malformed and cannot be decoded", async () => {
+      // Fail closed: a token that decodeJwt cannot parse yields no station
+      // role, so the user is never treated as a DJ.
+      const consoleErrorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: { id: "session-1" },
+          user: { id: "user-1", name: "Test DJ", role: null },
+        },
+      });
+      mockGetJWTToken.mockResolvedValue("not-a-jwt");
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("authenticated").textContent).toBe(
+          "not-authenticated"
+        );
+      });
+      // Confirm the fail-closed path ran via the decode catch, not merely the
+      // default null state.
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        "Failed to decode JWT for station role:",
+        expect.anything()
+      );
+
+      consoleErrorSpy.mockRestore();
     });
   });
 
@@ -172,9 +272,10 @@ describe("AuthProvider", () => {
       mockGetSession.mockResolvedValue({
         data: {
           session: { id: "session-1" },
-          user: { id: "user-1", name: "Test DJ", role: "dj" },
+          user: { id: "user-1", name: "Test DJ", role: null },
         },
       });
+      mockGetJWTToken.mockResolvedValue(fakeJwt({ sub: "user-1", role: "dj" }));
 
       await user.click(screen.getByText("Login"));
 
@@ -186,17 +287,50 @@ describe("AuthProvider", () => {
       });
     });
 
-    it("should return success on successful login", async () => {
+    it("should return success for a DJ with session.user.role null but JWT role dj", async () => {
       const user = userEvent.setup();
       mockGetSession
         .mockResolvedValueOnce({ data: null })
         .mockResolvedValueOnce({
           data: {
             session: { id: "session-1" },
-            user: { id: "user-1", name: "Test DJ", role: "dj" },
+            user: { id: "user-1", name: "Test DJ", role: null },
           },
         });
       mockSignInUsername.mockResolvedValue({ error: null });
+      mockGetJWTToken.mockResolvedValue(fakeJwt({ sub: "user-1", role: "dj" }));
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Login"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-login-result")).toBe("success");
+      });
+    });
+
+    it("should return success for a stationManager with session.user.role admin but JWT role stationManager", async () => {
+      const user = userEvent.setup();
+      mockGetSession
+        .mockResolvedValueOnce({ data: null })
+        .mockResolvedValueOnce({
+          data: {
+            session: { id: "session-1" },
+            user: { id: "user-1", name: "Station Manager", role: "admin" },
+          },
+        });
+      mockSignInUsername.mockResolvedValue({ error: null });
+      mockGetJWTToken.mockResolvedValue(
+        fakeJwt({ sub: "user-1", role: "stationManager" })
+      );
 
       render(
         <AuthProvider>
@@ -241,17 +375,50 @@ describe("AuthProvider", () => {
       });
     });
 
-    it("should return error when user lacks DJ role", async () => {
+    it("should return error when the JWT station role is not a DJ role", async () => {
       const user = userEvent.setup();
       mockGetSession
         .mockResolvedValueOnce({ data: null })
         .mockResolvedValueOnce({
           data: {
             session: { id: "session-1" },
-            user: { id: "user-1", name: "Member", role: "member" },
+            user: { id: "user-1", name: "Member", role: null },
           },
         });
       mockSignInUsername.mockResolvedValue({ error: null });
+      mockGetJWTToken.mockResolvedValue(fakeJwt({ sub: "user-1", role: "member" }));
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Login"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-login-result")).toBe(
+          "Your account does not have archive access"
+        );
+      });
+    });
+
+    it("should return error when no JWT token is available after login", async () => {
+      const user = userEvent.setup();
+      mockGetSession
+        .mockResolvedValueOnce({ data: null })
+        .mockResolvedValueOnce({
+          data: {
+            session: { id: "session-1" },
+            user: { id: "user-1", name: "Member", role: null },
+          },
+        });
+      mockSignInUsername.mockResolvedValue({ error: null });
+      mockGetJWTToken.mockResolvedValue(null);
 
       render(
         <AuthProvider>
@@ -279,9 +446,10 @@ describe("AuthProvider", () => {
       mockGetSession.mockResolvedValue({
         data: {
           session: { id: "session-1" },
-          user: { id: "user-1", name: "Test DJ", role: "dj" },
+          user: { id: "user-1", name: "Test DJ", role: null },
         },
       });
+      mockGetJWTToken.mockResolvedValue(fakeJwt({ sub: "user-1", role: "dj" }));
       mockSignOut.mockResolvedValue({});
 
       render(
@@ -331,10 +499,10 @@ describe("AuthProvider", () => {
       mockGetSession.mockResolvedValue({
         data: {
           session: { id: "session-1" },
-          user: { id: "user-1", name: "Test DJ", role: "dj" },
+          user: { id: "user-1", name: "Test DJ", role: null },
         },
       });
-      mockGetJWTToken.mockResolvedValue("jwt-token-123");
+      mockGetJWTToken.mockResolvedValue(fakeJwt({ sub: "user-1", role: "dj" }));
 
       render(
         <AuthProvider>
@@ -349,7 +517,9 @@ describe("AuthProvider", () => {
       await user.click(screen.getByText("Get Token"));
 
       await waitFor(() => {
-        expect(document.body.getAttribute("data-token")).toBe("jwt-token-123");
+        expect(document.body.getAttribute("data-token")).toBe(
+          fakeJwt({ sub: "user-1", role: "dj" })
+        );
       });
     });
   });
