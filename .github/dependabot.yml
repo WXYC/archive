@@ -17,6 +17,8 @@ updates:
       # this and upgrade TypeScript as a tracked change once the toolchain supports TS7.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
