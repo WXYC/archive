@@ -1,6 +1,6 @@
 # WXYC Archive
 
-A Next.js app for browsing and streaming archived WXYC recordings. Deployed to Cloudflare Workers via [OpenNext](https://opennext.js.org/cloudflare).
+A web application for browsing archived WXYC 89.3 FM broadcast recordings. Built with Next.js and deployed to Cloudflare Workers via [OpenNext](https://opennext.js.org/cloudflare).
 
 ## Local Development
 
@@ -9,6 +9,20 @@ cp .env.example .env    # fill in values as needed
 npm install
 npm run dev              # http://localhost:3000
 ```
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and fill in the values:
+
+| Variable | Description |
+|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | AWS credentials for S3 archive access |
+| `AWS_SECRET_ACCESS_KEY` | AWS credentials for S3 archive access |
+| `BETTER_AUTH_URL` | Server-side auth proxy destination (used by `next.config.ts` rewrites) |
+| `NEXT_PUBLIC_BETTER_AUTH_URL` | Client-side auth URL (same-origin `/auth` proxy used automatically when origins differ) |
+| `BETTER_AUTH_JWKS_URL` | JWKS endpoint for JWT verification |
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog analytics key (optional) |
+| `NEXT_PUBLIC_POSTHOG_HOST` | PostHog host (optional) |
 
 ## Testing
 
