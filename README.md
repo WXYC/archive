@@ -21,6 +21,9 @@ Copy `.env.example` to `.env` and fill in the values:
 | `BETTER_AUTH_URL` | Server-side auth proxy destination (used by `next.config.ts` rewrites) |
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | Client-side auth URL (same-origin `/auth` proxy used automatically when origins differ) |
 | `BETTER_AUTH_JWKS_URL` | JWKS endpoint for JWT verification |
+| `BACKEND_URL` | Backend-Service origin serving `GET /flowsheet/range`, the daily playlist's data source. Defaults to `https://api.wxyc.org`, so set it only to point at a staging Backend |
+| `LIBRARY_METADATA_URL` | library-metadata-lookup origin used for artwork/metadata enrichment |
+| `LML_API_KEY` | Bearer token for library-metadata-lookup (LML returns 401 without it and artwork lookups silently come back empty) |
 | `NEXT_PUBLIC_POSTHOG_KEY` | PostHog analytics key (optional) |
 | `NEXT_PUBLIC_POSTHOG_HOST` | PostHog host (optional) |
 

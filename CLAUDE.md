@@ -26,7 +26,7 @@ app/
     [...path]/
       route.ts        # Auth proxy: forwards /auth/* requests to upstream auth server
   api/
-    daily-playlist/   # GET route: fetches full day's entries from tubafrenzy, groups by show
+    daily-playlist/   # GET route: fetches full day's entries from Backend /flowsheet/range, groups by show
     signed-url/       # POST route: validates date range, returns presigned S3 URL
 components/
   audio-player.tsx    # Playback controls, seek, volume, skip, download, share, preloading
@@ -46,7 +46,7 @@ lib/
     use-daily-playlist.ts  # Fetches daily playlist, lazy artwork enrichment
   jwt-utils.ts        # Server-side JWT verification via jose JWKS
   types/
-    playlist.ts       # Types + mapping functions for hourly and daily playlist data
+    playlist.ts       # Backend /flowsheet/range wire types + mapping into the app's display shapes
   utils.ts            # cn(), formatDate(), formatTime(), getHourLabel(), getArchiveUrl(), createTimestamp()
   posthog.ts          # Server-side PostHog client
   __tests__/          # Lib tests
@@ -71,6 +71,7 @@ See `.env.example`. Key variables:
 - `BETTER_AUTH_URL` -- server-side auth proxy destination (used by next.config.ts rewrites)
 - `NEXT_PUBLIC_BETTER_AUTH_URL` -- client-side auth URL (baked into bundle)
 - `BETTER_AUTH_JWKS_URL` -- JWKS endpoint for JWT verification
+- `BACKEND_URL` -- Backend-Service origin serving `GET /flowsheet/range` (the daily playlist source). Defaults to `https://api.wxyc.org`; set it only to point a local build at a staging Backend
 - `LML_API_KEY` -- bearer token for library-metadata-lookup artwork enrichment (org-wide shared key; LML returns 401 without it and artwork lookups silently come back empty)
 
 ## Testing
@@ -117,10 +118,12 @@ Runtime secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `BETTER_AUTH_JWKS
 
 ## Show-Based Daily Playback
 
-The playlist panel displays an entire day's entries grouped by DJ shows (show start/stop boundaries from tubafrenzy). Key architectural patterns:
+The playlist panel displays an entire day's entries grouped by DJ shows. Key architectural patterns:
 
+- **Data source**: Backend-Service `GET /flowsheet/range?start=&end=` (epoch ms, half-open `[start, end)` on each entry's `add_time`, 8-day ceiling). It replaced tubafrenzy's `/playlists/dailyEntries` via wxyc-proxy, of which this route was the last live consumer. The wire shapes are declared in `lib/types/playlist.ts` as `FlowsheetRange*`; `wxyc-shared/api.yaml` is their source of truth.
+- **Day bounds are Eastern, and days are not all 24 hours.** `/api/daily-playlist` derives both `start` and `end` through `computeRadioHourEpoch`, pairing it with `nextCalendarDay` rather than adding 86,400,000 — the spring-forward day is 23 hours and the fall-back day is 25.
 - **Daily playlist hook** (`useDailyPlaylist`): Fetches all entries for a day via `/api/daily-playlist?date=YYYY-MM-DD`. Keyed on `selectedDate` only — changing the hour picker does not refetch.
-- **Show grouping**: Entries are grouped into `ShowBlock` objects using `radioShowId`. Entries not belonging to any known show are collected into an "Automation" block.
+- **Show grouping**: Entries are grouped into `ShowBlock` objects using `showId`. Two kinds of entry fall through to the trailing "Unattributed" block: those Backend reports with `show_id: null` (20 production rows, deliberately never backfilled), and those whose show is absent from the window because the range endpoint selects shows by overlap and does not treat a null `end_time` as open-ended.
 - **Cross-hour seeking**: When a user clicks an entry or navigates via J/K to a track in a different hour, the hour picker is updated (triggering a new MP3 load) and a pending seek offset is stored. Once the new MP3 loads, the pending seek is applied.
 - **Double-buffered audio preloading**: When playback reaches 15 seconds before the end of the current hour's MP3, the next hour's presigned URL is fetched and loaded into a hidden `<audio>` element (`preload="auto"`). The browser buffers only the beginning of the file via HTTP range requests. When the active audio ends, the preloaded element begins playing immediately for gapless transitions.
 - **Active entry tracking**: Uses `dayOffsetSeconds` (`selectedHour * 3600 + currentPlaybackTime`) to find the active entry across the full day, not just within the current hour.
@@ -129,7 +132,7 @@ The playlist panel displays an entire day's entries grouped by DJ shows (show st
 ## Relationship to Other Repos
 
 - **`@wxyc/shared`** -- provides `authClient`, `getJWTToken`, `isDJRole`, `DJ_ROLES`, and `Session` type. Installed from GitHub directly (`"@wxyc/shared": "github:WXYC/wxyc-shared"`).
-- **Backend-Service** -- auth server at `api.wxyc.org/auth`. The archive app proxies `/auth/*` requests to it via Next.js rewrites.
+- **Backend-Service** -- auth server at `api.wxyc.org/auth` (the archive app proxies `/auth/*` requests to it), and the playlist data source at `api.wxyc.org/flowsheet/range`.
 - **wxyc-archive-search** -- separate API for searching archived playlists. Not consumed by this app (this app streams audio, not playlist data).
 
 ## Example Music Data for Tests
