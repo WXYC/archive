@@ -211,13 +211,24 @@ describe("GET /api/daily-playlist", () => {
       expect(end).toBe(Date.parse("2025-01-01T05:00:00.000Z"));
     });
 
-    it("never exceeds Backend's 8-day ceiling", async () => {
-      mockUpstream({ shows: [], entries: [] });
-      await GET(makeRequest({ date: "2024-11-03" })); // the longest possible day
+    it("asks for exactly one calendar day, whatever its length", async () => {
+      // Deliberately not `expect(span).toBeLessThanOrEqual(EIGHT_DAYS)`: one
+      // calendar day can never exceed 25 hours, so that assertion holds for
+      // every possible input — including one produced by a completely broken
+      // end bound — and would look like a ceiling guard while guarding
+      // nothing. Pin the exact length per day instead.
+      for (const [date, expectedHours] of [
+        ["2024-01-15", 24],
+        ["2024-03-10", 23],
+        ["2024-11-03", 25],
+      ] as const) {
+        mockFetch.mockReset();
+        mockUpstream({ shows: [], entries: [] });
+        await GET(makeRequest({ date }));
 
-      const { start, end } = requestedWindow();
-      expect(end - start).toBeLessThanOrEqual(8 * 24 * 60 * 60 * 1000);
-      expect(end).toBeGreaterThan(start);
+        const { start, end } = requestedWindow();
+        expect(end - start).toBe(expectedHours * 60 * 60 * 1000);
+      }
     });
   });
 
