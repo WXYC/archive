@@ -109,7 +109,7 @@ export function PlaylistPanel({
               <div className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700 px-3 py-2">
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm font-semibold text-purple-700 dark:text-purple-400 truncate">
-                    {show.showId === 0 ? "Automation" : show.djHandle}
+                    {show.djHandle}
                     {show.showName && (
                       <span className="font-normal text-gray-500 dark:text-gray-400">
                         {" "}

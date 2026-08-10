@@ -85,7 +85,8 @@ export async function getArchiveUrl(
 
 /**
  * Compute the epoch milliseconds for a radio hour in America/New_York timezone.
- * Tubafrenzy stores radioHour as epoch ms at the hour boundary in Eastern time.
+ * WXYC runs on Eastern time, so an hour boundary is an Eastern clock hour, not
+ * a UTC one.
  *
  * @param dateStr ISO date string (YYYY-MM-DD)
  * @param hour Hour of day (0-23)
@@ -111,6 +112,26 @@ export function computeRadioHourEpoch(dateStr: string, hour: number): number {
 
   // Fallback (shouldn't happen for America/New_York)
   return Date.UTC(y, m - 1, d, hour + 5, 0, 0, 0);
+}
+
+/**
+ * The calendar day after `dateStr`, as another YYYY-MM-DD string.
+ *
+ * Purely calendar arithmetic — it says nothing about how many hours the day in
+ * between is. That is the point: pairing it with {@link computeRadioHourEpoch}
+ * yields a `[midnight ET, next midnight ET)` window whose length is whatever
+ * the Eastern calendar says (23, 24 or 25 hours), where `start + 86400000`
+ * would clip the fall-back day and overrun the spring-forward one.
+ *
+ * `Date.UTC` rather than a local `new Date(y, m, d)` so the rollover cannot be
+ * perturbed by the server's own timezone.
+ *
+ * @param dateStr ISO date string (YYYY-MM-DD)
+ * @returns The following date as YYYY-MM-DD
+ */
+export function nextCalendarDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
 /**

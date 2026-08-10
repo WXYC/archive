@@ -12,7 +12,7 @@ function createPlaycutEntry(
     offsetSeconds: 120,
     dayOffsetSeconds: 7320,
     hour: 2,
-    radioShowId: 1,
+    showId: 1,
     artistName: "Juana Molina",
     songTitle: "la paradoja",
     releaseTitle: "DOGA",

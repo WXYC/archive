@@ -8,6 +8,7 @@ import {
   getArchiveUrl,
   computeRadioHourEpoch,
   computeEntryOffsetSeconds,
+  nextCalendarDay,
 } from "../utils";
 
 describe("cn", () => {
@@ -274,5 +275,32 @@ describe("computeEntryOffsetSeconds", () => {
   it("handles fractional seconds by flooring", () => {
     const entryTime = radioHourEpoch + 1500; // 1.5 seconds
     expect(computeEntryOffsetSeconds(entryTime, radioHourEpoch)).toBe(1);
+  });
+});
+
+describe("nextCalendarDay", () => {
+  it.each([
+    ["2024-03-27", "2024-03-28"],
+    ["2024-03-10", "2024-03-11"], // spring forward
+    ["2024-11-03", "2024-11-04"], // fall back
+    ["2024-01-31", "2024-02-01"], // month rollover
+    ["2024-02-28", "2024-02-29"], // leap day
+    ["2024-02-29", "2024-03-01"], // off the leap day
+    ["2023-02-28", "2023-03-01"], // non-leap year
+    ["2024-12-31", "2025-01-01"], // year rollover
+  ])("maps %s to %s", (input, expected) => {
+    expect(nextCalendarDay(input)).toBe(expected);
+  });
+
+  it("pairs with computeRadioHourEpoch to yield a 23-hour spring-forward day", () => {
+    const start = computeRadioHourEpoch("2024-03-10", 0);
+    const end = computeRadioHourEpoch(nextCalendarDay("2024-03-10"), 0);
+    expect(end - start).toBe(23 * 60 * 60 * 1000);
+  });
+
+  it("pairs with computeRadioHourEpoch to yield a 25-hour fall-back day", () => {
+    const start = computeRadioHourEpoch("2024-11-03", 0);
+    const end = computeRadioHourEpoch(nextCalendarDay("2024-11-03"), 0);
+    expect(end - start).toBe(25 * 60 * 60 * 1000);
   });
 });
