@@ -104,13 +104,28 @@ export function computeRadioHourEpoch(dateStr: string, hour: number): number {
   // Eastern hour for the target date.
   for (const offset of [5, 4]) {
     const candidate = Date.UTC(y, m - 1, d, hour + offset, 0, 0, 0);
-    const etHour = parseInt(formatter.format(new Date(candidate)));
+    // `% 24` is load-bearing, not defensive tidiness. `hour12: false` does not
+    // pin the hour cycle: most ICU builds resolve it to h23 and render
+    // midnight "00", but some resolve it to h24 and render it "24". This route
+    // runs on the Cloudflare Workers runtime, whose ICU is not the Node one
+    // the tests exercise, so the h24 case is not hypothetical here. Without
+    // the modulo, midnight would match neither offset on such a runtime, both
+    // iterations would fall through, and the fallback below would silently
+    // assume EST.
+    const etHour = parseInt(formatter.format(new Date(candidate))) % 24;
     if (etHour === hour) {
       return candidate;
     }
   }
 
-  // Fallback (shouldn't happen for America/New_York)
+  // Unreachable for America/New_York, where one of EST/EDT always applies.
+  // Reached only if the runtime's formatter reports an hour that matches
+  // neither candidate, which since BS#2062 would silently mis-size a day
+  // window (24h on a 25h day) rather than merely shift one entry's offset.
+  // Log rather than guess quietly, then fall back to EST.
+  console.error(
+    `computeRadioHourEpoch: no offset produced Eastern hour ${hour} on ${dateStr}; assuming EST`
+  );
   return Date.UTC(y, m - 1, d, hour + 5, 0, 0, 0);
 }
 

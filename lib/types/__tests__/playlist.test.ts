@@ -4,6 +4,7 @@ import {
   groupEntriesIntoShows,
   UNATTRIBUTED_DJ_LABEL,
   UNATTRIBUTED_SHOW_ID,
+  UNKNOWN_DJ_LABEL,
   type DailyPlaylistEntry,
   type FlowsheetRangeEntry,
   type FlowsheetRangeShow,
@@ -64,6 +65,13 @@ describe("mapRangeEntry", () => {
     ["breakpoint", "breakpoint"],
     ["show_start", "showStart"],
     ["show_end", "showEnd"],
+    // dj_join / dj_leave only occur when a guest DJ joins mid-set, so a single
+    // sampled day can hold none while five sampled production weeks hold 25.
+    // Omitting them produced entryType: undefined, which JSON.stringify then
+    // dropped from the route's response entirely.
+    ["dj_join", "djJoin"],
+    ["dj_leave", "djLeave"],
+    ["message", "message"],
   ] as const)(
     "translates Backend entry_type %s to %s",
     (wireType, appType) => {
@@ -75,6 +83,42 @@ describe("mapRangeEntry", () => {
       expect(result.entryType).toBe(appType);
     }
   );
+
+  it("covers every entry_type api.yaml declares", () => {
+    // Guard against the next enum member Backend adds: the failure mode is
+    // silent (undefined), so the count is pinned rather than left implicit.
+    const declared = [
+      "track",
+      "show_start",
+      "show_end",
+      "dj_join",
+      "dj_leave",
+      "talkset",
+      "breakpoint",
+      "message",
+    ] as const;
+    for (const wireType of declared) {
+      const result = mapRangeEntry(
+        rangeEntry({ entry_type: wireType }),
+        DAY_START,
+        DAY_END
+      );
+      expect(result.entryType).toBeTypeOf("string");
+      expect(result.entryType).not.toBe("unknown");
+    }
+  });
+
+  it("maps an entry_type this build has never heard of to 'unknown', not undefined", () => {
+    const result = mapRangeEntry(
+      // Backend can add an enum member before this app redeploys.
+      rangeEntry({
+        entry_type: "some_future_type" as FlowsheetRangeEntry["entry_type"],
+      }),
+      DAY_START,
+      DAY_END
+    );
+    expect(result.entryType).toBe("unknown");
+  });
 
   it("treats a rotation_bin letter as the rotation flag, and null as not-in-rotation", () => {
     // Backend reports the bin (H/M/L/S) where tubafrenzy reported "true"/"false".
@@ -180,6 +224,46 @@ describe("mapRangeEntry", () => {
       fallBackEnd
     );
     expect(result.dayOffsetSeconds).toBe(88_200);
+  });
+
+  it("never reports hour 24 on a fall-back day — there is no 2400 MP3", () => {
+    // `hour` selects an S3 object (YYYYMMDDHH00.mp3). Letting the widened
+    // dayEndEpoch clamp push it to 24 would build a key that does not exist,
+    // so clicking any track in the 25th hour would 404 and kill playback.
+    const fallBackEnd = DAY_START + 90_000_000; // 25 hours
+    for (const offsetMs of [86_400_000, 88_200_000, 89_999_000]) {
+      const result = mapRangeEntry(
+        rangeEntry({ add_time: at(offsetMs) }),
+        DAY_START,
+        fallBackEnd
+      );
+      expect(result.hour).toBe(23);
+      expect(result.offsetSeconds).toBeGreaterThanOrEqual(0);
+      expect(result.offsetSeconds).toBeLessThanOrEqual(3600);
+    }
+  });
+
+  it("keeps hour within the archive's 0-23 range for every instant in a day", () => {
+    for (const dayLengthMs of [82_800_000, 86_400_000, 90_000_000]) {
+      for (const offsetMs of [0, dayLengthMs / 2, dayLengthMs - 1, dayLengthMs]) {
+        const result = mapRangeEntry(
+          rangeEntry({ add_time: at(offsetMs) }),
+          DAY_START,
+          DAY_START + dayLengthMs
+        );
+        expect(result.hour).toBeGreaterThanOrEqual(0);
+        expect(result.hour).toBeLessThanOrEqual(23);
+      }
+    }
+  });
+
+  it("carries a talkset's message through, not only a breakpoint's", () => {
+    const result = mapRangeEntry(
+      rangeEntry({ entry_type: "talkset", message: "TALKSET" }),
+      DAY_START,
+      DAY_END
+    );
+    expect(result.label).toBe("TALKSET");
   });
 
   it("preserves a null show_id rather than coercing it", () => {
@@ -294,10 +378,31 @@ describe("groupEntriesIntoShows", () => {
     expect(result[0].signoffTime).toBe(0);
   });
 
-  it("falls back to the unattributed label when a show has no dj_name", () => {
-    const result = groupEntriesIntoShows([], [{ ...shows[0], dj_name: null }]);
+  it("labels a show with no dj_name distinctly from the unattributed block", () => {
+    // dj_name is nullable by contract. "This show's DJ did not resolve" and
+    // "these rows belong to no show" are different facts, and the panel now
+    // renders djHandle uniformly, so one word for both would erase the
+    // distinction on screen.
+    const result = groupEntriesIntoShows(
+      [entry({ id: 1, showId: 10 }), entry({ id: 2, showId: null })],
+      [{ ...shows[0], dj_name: null }]
+    );
 
-    expect(result[0].djHandle).toBe(UNATTRIBUTED_DJ_LABEL);
+    expect(result[0].djHandle).toBe(UNKNOWN_DJ_LABEL);
+    expect(result[1].djHandle).toBe(UNATTRIBUTED_DJ_LABEL);
+    expect(UNKNOWN_DJ_LABEL).not.toBe(UNATTRIBUTED_DJ_LABEL);
+  });
+
+  it("reports signonTime 0, never NaN, for a malformed start_time", () => {
+    // ShowBlock documents both bounds as "epoch ms, or 0 when unknown". NaN
+    // satisfies neither, leaving a consumer no sentinel to test against.
+    const result = groupEntriesIntoShows(
+      [],
+      [{ ...shows[0], start_time: "not a timestamp", end_time: null }]
+    );
+
+    expect(result[0].signonTime).toBe(0);
+    expect(result[0].signoffTime).toBe(0);
   });
 
   it("returns empty show blocks when no entries match", () => {

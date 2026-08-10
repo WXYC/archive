@@ -15,7 +15,11 @@ export type PlaylistEntryType =
   | "talkset"
   | "breakpoint"
   | "showStart"
-  | "showEnd";
+  | "showEnd"
+  | "djJoin"
+  | "djLeave"
+  | "message"
+  | "unknown";
 
 export interface ArchivePlaylistEntry {
   id: number;
@@ -77,7 +81,10 @@ export type FlowsheetRangeEntryType =
   | "talkset"
   | "breakpoint"
   | "show_start"
-  | "show_end";
+  | "show_end"
+  | "dj_join"
+  | "dj_leave"
+  | "message";
 
 /**
  * One show overlapping the requested window.
@@ -132,14 +139,39 @@ export interface FlowsheetRangeResponse {
   entries: FlowsheetRangeEntry[];
 }
 
-/** Backend entry type -> this app's entry type. */
+/**
+ * Backend entry type -> this app's entry type.
+ *
+ * This must cover `api.yaml`'s `FlowsheetEntryType` enum in full, not just the
+ * types a sampled day happens to contain. `dj_join` and `dj_leave` are the ones
+ * that catch you out: they only appear when a guest DJ joins a show mid-set, so
+ * a single day of production data can easily show none, while five sampled
+ * weeks hold 25 of them. A missing key here yields `undefined`, which
+ * `JSON.stringify` then drops from the route's response entirely — the entry
+ * arrives at the panel with no `entryType` at all.
+ */
 const RANGE_ENTRY_TYPE: Record<FlowsheetRangeEntryType, PlaylistEntryType> = {
   track: "playcut",
   talkset: "talkset",
   breakpoint: "breakpoint",
   show_start: "showStart",
   show_end: "showEnd",
+  dj_join: "djJoin",
+  dj_leave: "djLeave",
+  message: "message",
 };
+
+/**
+ * Translate a wire entry type, tolerating one this build has never heard of.
+ *
+ * Backend can add an enum member before this app is redeployed. Mapping the
+ * unknown case to a named `"unknown"` rather than letting it fall through as
+ * `undefined` keeps `entryType` a total function of its input: the panel
+ * filters on `"playcut"`, so an unrecognized row is simply not displayed,
+ * which is the same outcome as today minus the undefined.
+ */
+const toPlaylistEntryType = (wireType: string): PlaylistEntryType =>
+  RANGE_ENTRY_TYPE[wireType as FlowsheetRangeEntryType] ?? "unknown";
 
 // --- Daily playlist types (for show-based timeline) ---
 
@@ -187,6 +219,22 @@ export const UNATTRIBUTED_SHOW_ID = 0;
 export const UNATTRIBUTED_DJ_LABEL = "Unattributed";
 
 /**
+ * Header shown for a real show whose DJ handle did not resolve.
+ *
+ * Deliberately NOT {@link UNATTRIBUTED_DJ_LABEL}. `dj_name` is nullable by
+ * contract — the PII-safe chain is per-show override -> `user.djName` ->
+ * `shows.legacy_dj_name` -> null — so a genuine show can arrive without a
+ * handle. "This show's DJ is unknown" and "these rows belong to no show" are
+ * different facts, and one word for both makes them indistinguishable in the
+ * panel, which now renders `djHandle` uniformly.
+ */
+export const UNKNOWN_DJ_LABEL = "Unknown DJ";
+
+/** Seconds in an hour, and the last hour the archive holds an MP3 for. */
+const SECONDS_PER_HOUR = 3600;
+const LAST_ARCHIVE_HOUR = 23;
+
+/**
  * Maps a Backend range entry to a DailyPlaylistEntry.
  *
  * The inherited `offsetSeconds` is always `dayOffsetSeconds % 3600` (within-hour
@@ -202,6 +250,18 @@ export const UNATTRIBUTED_DJ_LABEL = "Unattributed";
  * change is the clamp: it now uses the real end of the day (`dayEndEpoch`)
  * rather than a hardcoded 86,400 seconds, so a 25-hour day no longer collapses
  * its last hour of entries onto midnight.
+ *
+ * Widening that clamp is exactly why `hour` is now clamped too. `hour` is not
+ * a description — it selects an MP3. `app/page.tsx` feeds it to
+ * `setSelectedHour`, and `getArchiveUrl` pads it into the S3 key
+ * `YYYY/MM/DD/YYYYMMDDHH00.mp3`. On the 25-hour fall-back day the widened
+ * clamp lets `dayOffsetSeconds` reach 89,999, and `floor(89999 / 3600)` is 24,
+ * which builds `…2400.mp3` — an object that does not exist. Clicking any track
+ * in that hour, or pressing J/K into it, would 404 and kill playback. Pinning
+ * to hour 23 puts those entries on the last MP3 that does exist. Their
+ * within-hour offset is then wrong by up to an hour, which is a seek landing in
+ * the wrong place — a far smaller failure than a dead player, and confined to
+ * one hour, one day a year.
  *
  * @param entry Raw row from `GET /flowsheet/range`.
  * @param dayStartEpoch Epoch ms of midnight ET on the requested day.
@@ -227,12 +287,16 @@ export function mapRangeEntry(
           Math.floor((addTimeMs - dayStartEpoch) / 1000)
         )
       );
-  const hour = Math.floor(dayOffsetSeconds / 3600);
-  const offsetSeconds = dayOffsetSeconds % 3600;
+  // `LAST_ARCHIVE_HOUR`, not 24: see the note above on the fall-back day.
+  const hour = Math.min(LAST_ARCHIVE_HOUR, Math.floor(dayOffsetSeconds / 3600));
+  const offsetSeconds = Math.min(
+    SECONDS_PER_HOUR,
+    dayOffsetSeconds - hour * SECONDS_PER_HOUR
+  );
 
   const base: DailyPlaylistEntry = {
     id: entry.id,
-    entryType: RANGE_ENTRY_TYPE[entry.entry_type],
+    entryType: toPlaylistEntryType(entry.entry_type),
     offsetSeconds,
     dayOffsetSeconds,
     hour,
@@ -249,8 +313,13 @@ export function mapRangeEntry(
     // boolean this app wants.
     base.rotation = entry.rotation_bin != null;
     base.request = entry.request_flag === true;
-  } else if (entry.entry_type === "breakpoint") {
-    base.label = entry.message ?? undefined;
+  } else if (entry.message != null) {
+    // Not breakpoint-only: `message` is the body text of a talkset or a
+    // free-text message row too, and Backend emits it for all three. The
+    // tubafrenzy mapper read it only for breakpoints because the field did not
+    // exist on the other types there; carrying it through means a future
+    // consumer can render talkset text without another pass at the adapter.
+    base.label = entry.message;
   }
 
   return base;
@@ -263,14 +332,21 @@ export function mapRangeEntry(
  * their own, and they are not the same thing:
  *
  *   1. `show_id: null` — Backend reports the row as genuinely unattributed.
- *   2. `show_id` set but absent from `shows` — the window caught the row but
- *      not its show. `GET /flowsheet/range` selects shows by overlap and
- *      deliberately does not treat a null `end_time` as open-ended, so a show
- *      that started before the window and never recorded a sign-off is
- *      excluded while its entries are not.
+ *      20 of 2,619,011 rows are in that state and were deliberately never
+ *      backfilled, so the endpoint returns them rather than dropping them.
+ *      This case is expected and permanent.
+ *   2. `show_id` set but absent from `shows` — defence only. Backend's
+ *      `getShowsInTimeWindow` selects shows on three ORed arms, and the third
+ *      is `shows.id IN (SELECT DISTINCT show_id FROM flowsheet WHERE add_time
+ *      in window)`, added precisely so that every `show_id` an in-window entry
+ *      references resolves. So this should never fire against a correct
+ *      Backend, and it is NOT — as an earlier revision of this comment
+ *      claimed — the ordinary consequence of a dropped `show_end`; that gap is
+ *      exactly what the third arm closes. Kept because the alternative to a
+ *      catch-all is dropping playable entries on the floor if the contract
+ *      ever regresses.
  *
- * Both render under one "Unattributed" header. Dropping either would silently
- * lose playable entries, which is the failure this grouping exists to avoid.
+ * Both render under one "Unattributed" header.
  */
 export function groupEntriesIntoShows(
   entries: DailyPlaylistEntry[],
@@ -279,14 +355,18 @@ export function groupEntriesIntoShows(
   const showMap = new Map<number, ShowBlock>();
 
   for (const show of shows) {
+    // 0 is the panel's "no time to render" sentinel, and both bounds resolve
+    // through it. `start_time` gets the same NaN guard as `end_time` and not
+    // a bare Date.parse: ShowBlock documents these as "epoch ms, or 0", and a
+    // NaN would satisfy neither the value nor the sentinel, leaving no way for
+    // a consumer doing arithmetic on signonTime to detect that it is missing.
+    const signonTime = show.start_time ? Date.parse(show.start_time) : 0;
     const signoffTime = show.end_time ? Date.parse(show.end_time) : 0;
     showMap.set(show.id, {
       showId: show.id,
-      djHandle: show.dj_name ?? UNATTRIBUTED_DJ_LABEL,
+      djHandle: show.dj_name ?? UNKNOWN_DJ_LABEL,
       showName: show.show_name,
-      signonTime: Date.parse(show.start_time),
-      // 0 is the panel's "no sign-off time to render" sentinel. Number.isNaN
-      // covers a malformed end_time as well as the null case.
+      signonTime: Number.isNaN(signonTime) ? 0 : signonTime,
       signoffTime: Number.isNaN(signoffTime) ? 0 : signoffTime,
       entries: [],
     });
