@@ -11,7 +11,7 @@ import {
  * Backend-Service, which serves the public `GET /flowsheet/range`.
  *
  * Replaces `TUBAFRENZY_PROXY_URL` (`wxyc-proxy` -> tubafrenzy `/dailyEntries`),
- * which dies at the 2026-08-31 tubafrenzy cutover. This route was the last live
+ * which dies at the 2026-09-07 tubafrenzy cutover. This route was the last live
  * consumer of `wxyc-proxy`.
  */
 const BACKEND_URL = process.env.BACKEND_URL || "https://api.wxyc.org";
