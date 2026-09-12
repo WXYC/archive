@@ -18,12 +18,18 @@ export function LoginDialog() {
   const [usernameOrEmail, setUsernameOrEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  // Distinguishes guidance ("that login no longer exists") from a plain
+  // credential rejection, which the two are rendered differently for.
+  const [errorKind, setErrorKind] = useState<
+    "retired-shared-credential" | null
+  >(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setErrorKind(null);
     setIsSubmitting(true);
 
     try {
@@ -34,6 +40,7 @@ export function LoginDialog() {
         setPassword("");
       } else {
         setError(result.error);
+        setErrorKind(result.kind ?? null);
       }
     } finally {
       setIsSubmitting(false);
@@ -97,7 +104,25 @@ export function LoginDialog() {
               required
             />
           </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error &&
+            (errorKind === "retired-shared-credential" ? (
+              <div
+                role="alert"
+                className="rounded-md border border-amber-500/50 bg-amber-500/10 p-3 text-sm"
+              >
+                <p>{error}</p>
+                <a
+                  href="https://dj.wxyc.org"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-block font-medium underline underline-offset-4"
+                >
+                  Go to dj.wxyc.org
+                </a>
+              </div>
+            ) : (
+              <p className="text-sm text-red-500">{error}</p>
+            ))}
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? "Signing in..." : "Sign In"}
           </Button>
