@@ -189,9 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Short-circuit before touching the network: this account cannot
       // authenticate any more, and better-auth's generic "invalid username or
       // password" would not tell a returning DJ what actually changed.
-      if (
-        usernameOrEmail.trim().toLowerCase() === RETIRED_SHARED_USERNAME
-      ) {
+      if (usernameOrEmail.trim().toLowerCase() === RETIRED_SHARED_USERNAME) {
         return {
           success: false,
           kind: "retired-shared-credential",

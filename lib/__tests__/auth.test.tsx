@@ -39,15 +39,9 @@ function fakeJwt(payload: Record<string, unknown>): string {
   return `${b64url(header)}.${b64url(payload)}.sig`;
 }
 
-// Test component that uses the auth hook. The credential props default to a
-// normal username so existing tests render it bare.
-function TestComponent({
-  identifier = "testuser",
-  password = "password",
-}: {
-  identifier?: string;
-  password?: string;
-} = {}) {
+// Test component that uses the auth hook. `identifier` defaults to a normal
+// username so existing tests render it bare.
+function TestComponent({ identifier = "testuser" }: { identifier?: string }) {
   const {
     isLoading,
     isAuthenticated,
@@ -68,7 +62,7 @@ function TestComponent({
       <div data-testid="user-role">{userRole ?? "no-role"}</div>
       <button
         onClick={async () => {
-          const result = await login(identifier, password);
+          const result = await login(identifier, "password");
           document.body.setAttribute(
             "data-login-result",
             result.success ? "success" : result.error
