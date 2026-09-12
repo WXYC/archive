@@ -16,6 +16,7 @@ import {
 } from "@wxyc/shared/auth-client";
 import type { Session } from "@wxyc/shared/auth-client";
 import { decodeJwt } from "jose";
+import { resolveEmail, sendVerificationOtp, signInWithOtp } from "./otp";
 
 // Extended user type. NOTE: `role` here is the better-auth admin-plugin role
 // (null for a plain dj, "admin" for elevated accounts), NOT the WXYC station
@@ -41,6 +42,15 @@ type LoginResult =
   | { success: true }
   | { success: false; error: string; kind?: LoginFailureKind };
 
+/**
+ * Result of requesting an emailed sign-in code. Carries the resolved address
+ * so the dialog can tell the user where to look, which matters when they
+ * signed in by username and may not recall which address is on the account.
+ */
+type SendCodeResult =
+  | { success: true; email: string }
+  | { success: false; error: string; kind?: LoginFailureKind };
+
 type AuthContextType = {
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -48,6 +58,8 @@ type AuthContextType = {
   user: User | null;
   userRole: string | null;
   login: (usernameOrEmail: string, password: string) => Promise<LoginResult>;
+  sendLoginCode: (identifier: string) => Promise<SendCodeResult>;
+  verifyLoginCode: (email: string, otp: string) => Promise<LoginResult>;
   logout: () => Promise<void>;
   getToken: () => Promise<string | null>;
 };
@@ -70,6 +82,24 @@ export { DJ_ROLES, isDJRole };
  * tries it any more" is not observable; revisit on 2027-03-12 and delete.
  */
 const RETIRED_SHARED_USERNAME = "wxycarch";
+
+const RETIRED_SHARED_MESSAGE =
+  "The shared archive login has been retired. Sign in with your own WXYC DJ account — if you don't have one yet, you can set it up at dj.wxyc.org.";
+
+/**
+ * Detect an attempt to use the retired shared account, whichever sign-in form
+ * it arrives through. Returns the failure to hand back, or null to carry on.
+ */
+function retiredSharedCredential(
+  identifier: string
+): { success: false; error: string; kind: LoginFailureKind } | null {
+  if (identifier.trim().toLowerCase() !== RETIRED_SHARED_USERNAME) return null;
+  return {
+    success: false,
+    kind: "retired-shared-credential",
+    error: RETIRED_SHARED_MESSAGE,
+  };
+}
 
 // Tolerance for client/server clock skew when treating a decoded JWT as
 // expired. We only discard a token that is expired by more than this, so a
@@ -230,14 +260,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Short-circuit before touching the network: this account cannot
       // authenticate any more, and better-auth's generic "invalid username or
       // password" would not tell a returning DJ what actually changed.
-      if (usernameOrEmail.trim().toLowerCase() === RETIRED_SHARED_USERNAME) {
-        return {
-          success: false,
-          kind: "retired-shared-credential",
-          error:
-            "The shared archive login has been retired. Sign in with your own WXYC DJ account — if you don't have one yet, you can set it up at dj.wxyc.org.",
-        };
-      }
+      const retired = retiredSharedCredential(usernameOrEmail);
+      if (retired) return retired;
 
       try {
         // Determine if input is email or username
@@ -265,6 +289,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           error: error instanceof Error ? error.message : "Login failed",
         };
       }
+    },
+    [completeSignIn]
+  );
+
+  /**
+   * Request a six-digit sign-in code by email.
+   *
+   * Accepts a username or an address, matching the password form, and resolves
+   * the former through the public lookup endpoint before asking better-auth to
+   * send anything.
+   */
+  const sendLoginCode = useCallback(
+    async (identifier: string): Promise<SendCodeResult> => {
+      const retired = retiredSharedCredential(identifier);
+      if (retired) return retired;
+
+      const email = await resolveEmail(identifier);
+      if (!email) {
+        return {
+          success: false,
+          error: "No account matches that username or email.",
+        };
+      }
+
+      const sent = await sendVerificationOtp(email);
+      if (!sent.ok) return { success: false, error: sent.error };
+
+      return { success: true, email };
+    },
+    []
+  );
+
+  /**
+   * Exchange an emailed code for a session, then apply the same station-role
+   * gate a password sign-in goes through. A valid code proves identity; it
+   * does not by itself confer archive access.
+   */
+  const verifyLoginCode = useCallback(
+    async (email: string, otp: string): Promise<LoginResult> => {
+      const verified = await signInWithOtp(email, otp);
+      if (!verified.ok) return { success: false, error: verified.error };
+
+      return completeSignIn();
     },
     [completeSignIn]
   );
@@ -308,6 +375,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         userRole: stationRole,
         login,
+        sendLoginCode,
+        verifyLoginCode,
         logout,
         getToken,
       }}

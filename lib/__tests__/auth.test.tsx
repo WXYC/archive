@@ -27,6 +27,16 @@ vi.mock("@wxyc/shared/auth-client", () => ({
   DJ_ROLES: ["dj", "musicDirector", "stationManager"],
 }));
 
+const mockResolveEmail = vi.fn();
+const mockSendVerificationOtp = vi.fn();
+const mockSignInWithOtp = vi.fn();
+
+vi.mock("../otp", () => ({
+  resolveEmail: (identifier: string) => mockResolveEmail(identifier),
+  sendVerificationOtp: (email: string) => mockSendVerificationOtp(email),
+  signInWithOtp: (email: string, otp: string) => mockSignInWithOtp(email, otp),
+}));
+
 // Build a realistic (unsigned) JWT string whose payload decodes via jose's
 // decodeJwt. The signature segment is not verified client-side, so any
 // placeholder works here.
@@ -50,6 +60,8 @@ function TestComponent({ identifier = "testuser" }: { identifier?: string }) {
     login,
     logout,
     getToken,
+    sendLoginCode,
+    verifyLoginCode,
   } = useAuth();
 
   return (
@@ -75,6 +87,32 @@ function TestComponent({ identifier = "testuser" }: { identifier?: string }) {
       >
         Login
       </button>
+      <button
+        onClick={async () => {
+          const result = await sendLoginCode(identifier);
+          document.body.setAttribute(
+            "data-send-code",
+            result.success ? `sent:${result.email}` : result.error
+          );
+          document.body.setAttribute(
+            "data-send-code-kind",
+            result.success ? "success" : (result.kind ?? "unspecified")
+          );
+        }}
+      >
+        Send Code
+      </button>
+      <button
+        onClick={async () => {
+          const result = await verifyLoginCode("dj@wxyc.org", "123456");
+          document.body.setAttribute(
+            "data-verify-code",
+            result.success ? "success" : result.error
+          );
+        }}
+      >
+        Verify Code
+      </button>
       <button onClick={() => logout()}>Logout</button>
       <button
         onClick={async () => {
@@ -93,6 +131,9 @@ describe("AuthProvider", () => {
     vi.clearAllMocks();
     document.body.removeAttribute("data-login-result");
     document.body.removeAttribute("data-login-kind");
+    document.body.removeAttribute("data-send-code");
+    document.body.removeAttribute("data-send-code-kind");
+    document.body.removeAttribute("data-verify-code");
     document.body.removeAttribute("data-token");
   });
 
@@ -565,6 +606,178 @@ describe("AuthProvider", () => {
       expect(document.body.getAttribute("data-login-kind")).not.toBe(
         "retired-shared-credential"
       );
+    });
+  });
+
+  describe("sendLoginCode", () => {
+    it("resolves the identifier and requests a code for the resolved address", async () => {
+      const user = userEvent.setup();
+      mockGetSession.mockResolvedValue({ data: null });
+      mockResolveEmail.mockResolvedValue("dj@wxyc.org");
+      mockSendVerificationOtp.mockResolvedValue({ ok: true });
+
+      render(
+        <AuthProvider>
+          <TestComponent identifier="djhandle" />
+        </AuthProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Send Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-send-code")).toBe(
+          "sent:dj@wxyc.org"
+        );
+      });
+      expect(mockResolveEmail).toHaveBeenCalledWith("djhandle");
+      expect(mockSendVerificationOtp).toHaveBeenCalledWith("dj@wxyc.org");
+    });
+
+    it("does not send anything when no account matches", async () => {
+      const user = userEvent.setup();
+      mockGetSession.mockResolvedValue({ data: null });
+      mockResolveEmail.mockResolvedValue(null);
+
+      render(
+        <AuthProvider>
+          <TestComponent identifier="nobody" />
+        </AuthProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Send Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-send-code")).toMatch(
+          /no account/i
+        );
+      });
+      expect(mockSendVerificationOtp).not.toHaveBeenCalled();
+    });
+
+    it("flags the retired shared credential here too, without a lookup", async () => {
+      const user = userEvent.setup();
+      mockGetSession.mockResolvedValue({ data: null });
+
+      render(
+        <AuthProvider>
+          <TestComponent identifier="wxycarch" />
+        </AuthProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Send Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-send-code-kind")).toBe(
+          "retired-shared-credential"
+        );
+      });
+      // Emailing a code to whatever that account resolves to would be worse
+      // than useless, so the lookup never happens.
+      expect(mockResolveEmail).not.toHaveBeenCalled();
+      expect(mockSendVerificationOtp).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("verifyLoginCode", () => {
+    it("applies the same station-role gate as a password sign-in", async () => {
+      const user = userEvent.setup();
+      mockSignInWithOtp.mockResolvedValue({ ok: true });
+      mockGetSession
+        .mockResolvedValueOnce({ data: null })
+        .mockResolvedValue({
+          data: {
+            session: { id: "s1" },
+            user: { id: "u1", name: "Test DJ", email: "dj@wxyc.org" },
+          },
+        });
+      mockGetJWTToken.mockResolvedValue(
+        fakeJwt({ role: "dj", exp: Math.floor(Date.now() / 1000) + 3600 })
+      );
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Verify Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-verify-code")).toBe("success");
+      });
+    });
+
+    it("refuses a non-DJ even with a valid code", async () => {
+      const user = userEvent.setup();
+      mockSignInWithOtp.mockResolvedValue({ ok: true });
+      mockGetSession
+        .mockResolvedValueOnce({ data: null })
+        .mockResolvedValue({
+          data: {
+            session: { id: "s1" },
+            user: { id: "u2", name: "Member", email: "m@wxyc.org" },
+          },
+        });
+      mockGetJWTToken.mockResolvedValue(
+        fakeJwt({ role: "member", exp: Math.floor(Date.now() / 1000) + 3600 })
+      );
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Verify Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-verify-code")).toMatch(
+          /does not have archive access/i
+        );
+      });
+    });
+
+    it("surfaces a rejected code without touching the session", async () => {
+      const user = userEvent.setup();
+      mockGetSession.mockResolvedValue({ data: null });
+      mockSignInWithOtp.mockResolvedValue({
+        ok: false,
+        error: "That code has expired. Please request a new one.",
+      });
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      mockGetSession.mockClear();
+      await user.click(screen.getByText("Verify Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-verify-code")).toMatch(
+          /expired/i
+        );
+      });
+      expect(mockGetSession).not.toHaveBeenCalled();
     });
   });
 
