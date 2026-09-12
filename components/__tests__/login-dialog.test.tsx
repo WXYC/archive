@@ -503,6 +503,56 @@ describe("LoginDialog", () => {
       expect(mockSendLoginCode).toHaveBeenCalledTimes(1);
     });
 
+    // Resending re-uses the resolved address rather than the typed username,
+    // so a flaky username lookup cannot answer "no account matches" on the
+    // screen that just named the mailbox.
+    it("resends to the resolved address, not the typed identifier", async () => {
+      const user = userEvent.setup();
+      mockSendLoginCode.mockResolvedValue({
+        success: true,
+        email: "dj@wxyc.org",
+      });
+
+      render(<LoginDialog />);
+      await reachCodeEntry(user, "djhandle");
+      mockSendLoginCode.mockClear();
+
+      await user.click(screen.getByRole("button", { name: /resend code/i }));
+
+      await waitFor(() => {
+        expect(mockSendLoginCode).toHaveBeenCalledWith("dj@wxyc.org");
+      });
+    });
+
+    // verifyLoginCode can reject where login() cannot: it reaches
+    // completeSignIn, whose getSession() call is unwrapped. The user must not
+    // be left staring at a button that silently snapped back.
+    it("reports a rejected verification instead of failing silently", async () => {
+      const user = userEvent.setup();
+      mockSendLoginCode.mockResolvedValue({
+        success: true,
+        email: "dj@wxyc.org",
+      });
+      mockVerifyLoginCode.mockRejectedValue(new Error("network down"));
+
+      render(<LoginDialog />);
+      const codeField = await reachCodeEntry(user);
+
+      await user.type(codeField, "123456");
+      await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/could not complete sign-in/i)
+        ).toBeInTheDocument();
+      });
+      // Still on the code form, and no longer locked out of retrying.
+      expect(screen.getByLabelText(/login code/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /^sign in$/i })
+      ).toBeEnabled();
+    });
+
     it("shows the retired-credential alert from the code form too", async () => {
       const user = userEvent.setup();
       mockSendLoginCode.mockResolvedValue({
