@@ -89,6 +89,16 @@ export function LoginDialog() {
       setMethod(readPreferredMethod());
       setCodeSentTo(null);
       setCode("");
+      // Drop any secret left over from a dismissed attempt. A failed sign-in
+      // keeps the dialog open, so a password only survives to here if the user
+      // deliberately closed it — and this is the shared control-room machine.
+      // The identifier is left in place: it is not a secret, and the usual
+      // reason to reopen is to correct it.
+      setPassword("");
+      // Escape closes the dialog mid-request, and isSubmitting would otherwise
+      // survive into the next open — rendering a fresh form with every field
+      // disabled until an abandoned request happens to settle.
+      setIsSubmitting(false);
       clearFeedback();
     }
   };
@@ -127,15 +137,22 @@ export function LoginDialog() {
     }
   };
 
-  const handleSendCode = async (e: React.FormEvent) => {
-    e.preventDefault();
+  /**
+   * Request a code for whatever the identifier field currently holds. Sending
+   * the first code and resending one differ only in what they say afterwards,
+   * so the request, the form lock and the failure rendering live here once.
+   */
+  const requestCode = async (
+    identifier: string,
+    onSent: (email: string) => void
+  ) => {
     clearFeedback();
     setIsSubmitting(true);
 
     try {
-      const result = await sendLoginCode(usernameOrEmail);
+      const result = await sendLoginCode(identifier);
       if (result.success) {
-        setCodeSentTo(result.email);
+        onSent(result.email);
       } else {
         setError(result.error);
         setErrorKind(result.kind ?? null);
@@ -143,6 +160,11 @@ export function LoginDialog() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSendCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    return requestCode(usernameOrEmail, (email) => setCodeSentTo(email));
   };
 
   const handleVerifyCode = async (e: React.FormEvent) => {
@@ -159,26 +181,27 @@ export function LoginDialog() {
         setError(result.error);
         setErrorKind(result.kind ?? null);
       }
+    } catch {
+      // Unlike login(), verifyLoginCode can reject: it reaches completeSignIn,
+      // whose authClient.getSession() call is not wrapped. Without this the
+      // button would just snap back to "Sign In" with nothing said, and the
+      // obvious retry fails because the server has already spent the code.
+      setError("Could not complete sign-in. Please request a new code.");
+      setErrorKind(null);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleResend = async () => {
-    clearFeedback();
-    setIsSubmitting(true);
-    try {
-      const result = await sendLoginCode(usernameOrEmail);
-      if (result.success) {
-        setNotice(`A new code is on its way to ${result.email}.`);
-      } else {
-        setError(result.error);
-        setErrorKind(result.kind ?? null);
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  // Resend against the address the first code reached, not the raw identifier.
+  // resolveEmail returns anything containing "@" as-is, so this skips the
+  // username lookup; re-running it would let one transient 5xx answer "no
+  // account matches that username or email" on the very screen that just
+  // named the mailbox.
+  const handleResend = () =>
+    requestCode(codeSentTo ?? usernameOrEmail, (email) =>
+      setNotice(`A new code is on its way to ${email}.`)
+    );
 
   const handleLogout = async () => {
     await logout();
@@ -226,7 +249,14 @@ export function LoginDialog() {
         ) : (
           <p className="text-sm text-red-500">{error}</p>
         ))}
-      {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
+      {/* role=status, not alert: resending is a confirmation, and it is the
+          only feedback a resend produces, so without a live region a screen
+          reader user hears nothing at all after pressing the button. */}
+      {notice && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {notice}
+        </p>
+      )}
     </>
   );
 
@@ -318,6 +348,12 @@ export function LoginDialog() {
                 placeholder="123456"
                 inputMode="numeric"
                 autoComplete="one-time-code"
+                // Advancing to this stage replaces the form that held focus,
+                // which would otherwise drop focus to the body and strand
+                // keyboard and screen-reader users mid-flow. Radix only
+                // manages focus when the dialog itself opens, not across a
+                // stage change inside it.
+                autoFocus
                 disabled={isSubmitting}
                 required
               />
