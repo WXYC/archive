@@ -30,7 +30,8 @@ app/
     signed-url/       # POST route: validates date range, returns presigned S3 URL
 components/
   audio-player.tsx    # Playback controls, seek, volume, skip, download, share, preloading
-  login-dialog.tsx    # DJ sign-in dialog (emailed code by default, password on request)
+  login-dialog.tsx    # DJ sign-in dialog (emailed code by default, password or QR on request)
+  qr-sign-in.tsx      # QR device-authorization stage: renders the code, polls for approval
   share-dialog.tsx    # Shareable timestamped URL generator
   PostHogProvider.tsx # Client-side PostHog init + pageview tracking
   PostHogAuthSync.tsx # Syncs auth state to PostHog
@@ -46,6 +47,8 @@ lib/
     use-daily-playlist.ts  # Fetches daily playlist, lazy artwork enrichment
   jwt-utils.ts        # Server-side JWT verification via jose JWKS
   otp.ts              # Email one-time-code contracts spoken directly to better-auth
+  device-auth.ts      # RFC 8628 QR sign-in: device code request + token polling
+  flags.ts            # Build-time feature flags (isQrLoginEnabled)
   types/
     playlist.ts       # Backend /flowsheet/range wire types + mapping into the app's display shapes
   utils.ts            # cn(), formatDate(), formatTime(), getHourLabel(), getArchiveUrl(), createTimestamp()
@@ -112,8 +115,9 @@ Runtime secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `BETTER_AUTH_JWKS
 - UI primitives come from shadcn/ui (New York variant, `components.json`). Add new ones with `npx shadcn@latest add <component>`.
 - Styling: Tailwind utility classes, `cn()` helper for conditional merging, CSS custom properties for theming.
 - Auth is proxied via a catch-all API route (`app/auth/[...path]/route.ts`) to the upstream auth server, not via Next.js rewrites (which don't work on Cloudflare Workers).
-- Auth context: `useAuth()` hook provides `isAuthenticated`, `login`, `sendLoginCode`, `verifyLoginCode`, `logout`, `getToken`. DJ-level access is checked via `isDJRole()` from `@wxyc/shared/auth-client`.
-- Two sign-in methods, both ending at the same gate: password (`login`) and emailed one-time code (`sendLoginCode` then `verifyLoginCode`). The dialog defaults to the emailed code, matching dj.wxyc.org, and remembers the last method used. Whichever path proved the credentials, `completeSignIn` resolves the station role from the JWT claim and refuses non-DJs — proving identity is not the same as having archive access.
+- Auth context: `useAuth()` hook provides `isAuthenticated`, `login`, `sendLoginCode`, `verifyLoginCode`, `completeSignIn`, `logout`, `getToken`. DJ-level access is checked via `isDJRole()` from `@wxyc/shared/auth-client`.
+- Three sign-in methods, all ending at the same gate: password (`login`), emailed one-time code (`sendLoginCode` then `verifyLoginCode`), and QR device authorization (`lib/device-auth.ts`, finishing via `completeSignIn` because better-auth sets the cookie at the token endpoint with no credential call to hang the gate off). The dialog defaults to the emailed code, matching dj.wxyc.org, and remembers the last method used. Whichever path proved the credentials, `completeSignIn` resolves the station role from the JWT claim and refuses non-DJs — proving identity is not the same as having archive access.
+- **Feature flags must be listed in `deploy.yml`'s build `env:` block.** `NEXT_PUBLIC_*` values are inlined at build time and only from that block, so a flag added in code but not there is silently always-off in production. `NEXT_PUBLIC_QR_LOGIN_ENABLED` gates QR sign-in and deliberately shares dj-site's variable name: approval happens on dj.wxyc.org, so enabling one half alone sends DJs to a page that cannot help them.
 - `lib/otp.ts` talks to better-auth's OTP endpoints directly rather than through `authClient.emailOtp.*`, because the shared client does not register the `emailOTPClient` plugin. That plugin is types-only — the client is a proxy that derives URL, method and body from the property path — so a plugin-less client already issues identical requests. Adding it would have cost a cross-repo release plus a three-major dependency bump to buy types at two call sites.
 - S3 key format: `YYYY/MM/DD/YYYYMMDDHH00.mp3`
 - URL timestamp format: `?t=YYYYMMDDHHMMSS` (14 digits)

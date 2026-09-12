@@ -13,6 +13,15 @@ const mockLogout = vi.fn();
 const mockSendLoginCode = vi.fn();
 const mockVerifyLoginCode = vi.fn();
 
+vi.mock("@/components/qr-sign-in", () => ({
+  QrSignIn: ({ onUsePassword }: { onUsePassword: () => void }) => (
+    <div>
+      <span>qr-stage</span>
+      <button onClick={onUsePassword}>stub use password</button>
+    </div>
+  ),
+}));
+
 vi.mock("@/lib/auth", () => ({
   useAuth: () => ({
     login: mockLogin,
@@ -621,6 +630,79 @@ describe("LoginDialog", () => {
       await openDialog(user);
 
       expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /email me a code/i })
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("QR sign-in flag", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("offers no QR entry point while the flag is off", async () => {
+      const user = userEvent.setup();
+
+      render(<LoginDialog />);
+      await openDialog(user);
+
+      expect(
+        screen.queryByRole("button", { name: /qr code/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it("offers QR from both forms once the flag is on", async () => {
+      vi.stubEnv("NEXT_PUBLIC_QR_LOGIN_ENABLED", "true");
+      const user = userEvent.setup();
+
+      render(<LoginDialog />);
+      await openDialog(user);
+      expect(
+        screen.getByRole("button", { name: /qr code/i })
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /use a password/i }));
+      expect(
+        screen.getByRole("button", { name: /qr code/i })
+      ).toBeInTheDocument();
+    });
+
+    it("switches to the QR stage and back to the password form", async () => {
+      vi.stubEnv("NEXT_PUBLIC_QR_LOGIN_ENABLED", "1");
+      const user = userEvent.setup();
+
+      render(<LoginDialog />);
+      await openDialog(user);
+      await user.click(screen.getByRole("button", { name: /qr code/i }));
+
+      expect(screen.getByText("qr-stage")).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole("button", { name: /stub use password/i })
+      );
+      expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    });
+
+    it("does not restore a stored qr preference while the flag is off", async () => {
+      vi.stubEnv("NEXT_PUBLIC_QR_LOGIN_ENABLED", "true");
+      const user = userEvent.setup();
+      installLocalStorage();
+
+      render(<LoginDialog />);
+      await openDialog(user);
+      await user.click(screen.getByRole("button", { name: /qr code/i }));
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      });
+
+      // Flag goes dark between sessions; the stored "qr" must not strand the
+      // browser on a method it can no longer reach.
+      vi.stubEnv("NEXT_PUBLIC_QR_LOGIN_ENABLED", "false");
+      await openDialog(user);
+
+      expect(screen.queryByText("qr-stage")).not.toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: /email me a code/i })
       ).toBeInTheDocument();
