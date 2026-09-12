@@ -4,6 +4,22 @@
   "name": "wxyc-archive",
   "compatibility_date": "2025-12-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Expected `iss` and `aud` on JWTs from the auth service, consumed by
+  // lib/jwt-utils.ts. Plain vars rather than secrets: neither is secret — the
+  // issuer is published at api.wxyc.org/auth/.well-known/openid-configuration
+  // — and a wrong value rejects every token silently, so the value is worth
+  // keeping somewhere reviewable and greppable rather than write-only inside
+  // Cloudflare.
+  //
+  // Both are the ORIGIN of the auth service's base URL, with the path
+  // stripped. better-auth's jwt plugin defaults iss and aud to `baseURLOrigin`
+  // and Backend-Service overrides neither, so despite its base URL being
+  // https://api.wxyc.org/auth, the claims are the bare origin. Using the /auth
+  // form here would reject every token.
+  "vars": {
+    "BETTER_AUTH_ISSUER": "https://api.wxyc.org",
+    "BETTER_AUTH_AUDIENCE": "https://api.wxyc.org"
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
