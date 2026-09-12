@@ -76,12 +76,28 @@ test.describe("Authentication", () => {
     await expect(page.locator('[data-slot="dialog-title"]')).toContainText("DJ Sign In");
   });
 
-  test("should show login form fields", async ({ page }) => {
+  test("should open on the emailed-code form", async ({ page }) => {
     await page.goto("/");
 
     await page.getByRole("button", { name: /dj sign in/i }).click();
 
-    // Check for form fields
+    // The emailed code is the default method, matching dj.wxyc.org, so there
+    // is no password field until the user asks for one.
+    await expect(page.getByLabel(/username or email/i)).toBeVisible();
+    await expect(page.getByLabel(/password/i)).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: /email me a code/i })
+    ).toBeVisible();
+  });
+
+  test("should show password fields after switching methods", async ({
+    page,
+  }) => {
+    await page.goto("/");
+
+    await page.getByRole("button", { name: /dj sign in/i }).click();
+    await page.getByRole("button", { name: /use a password/i }).click();
+
     await expect(page.getByLabel(/username or email/i)).toBeVisible();
     await expect(page.getByLabel(/password/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /^sign in$/i })).toBeVisible();
@@ -104,6 +120,7 @@ test.describe("Authentication", () => {
     await page.goto("/");
 
     await page.getByRole("button", { name: /dj sign in/i }).click();
+    await page.getByRole("button", { name: /use a password/i }).click();
 
     // Fill in invalid credentials
     await page.getByLabel(/username or email/i).fill("invaliduser");
@@ -112,8 +129,14 @@ test.describe("Authentication", () => {
     // Submit
     await page.getByRole("button", { name: /^sign in$/i }).click();
 
-    // Should show an error (actual error message depends on backend)
-    await expect(page.getByText(/invalid|error|failed/i)).toBeVisible({ timeout: 10000 });
+    // Scoped to the dialog: an unscoped match also picks up Next's dev error
+    // overlay, which says "Failed to generate signed URL" whenever the local
+    // build has no AWS credentials — three matches and a strict-mode failure.
+    // The exact wording comes from the auth server, so only the shape is
+    // asserted here.
+    await expect(
+      page.getByRole("dialog").getByText(/invalid|incorrect|failed/i)
+    ).toBeVisible({ timeout: 10000 });
   });
 });
 
