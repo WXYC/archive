@@ -1,5 +1,5 @@
 import * as jose from "jose";
-import type { WXYCRole } from "@wxyc/shared/auth-client/auth";
+import { canonicalizeRole, type WXYCRole } from "@wxyc/shared/auth-client/auth";
 
 const JWKS_URL =
   process.env.BETTER_AUTH_JWKS_URL || "https://api.wxyc.org/auth/jwks";
@@ -39,7 +39,12 @@ function getVerifyOptions(): jose.JWTVerifyOptions {
 
 export type JWTPayload = {
   sub: string;
-  role?: WXYCRole;
+  /**
+   * The raw claim, whatever the token carried. Typed as a plain string rather
+   * than WXYCRole because nothing has validated it at this point — use the
+   * `role` on VerifyResult, which has been through canonicalizeRole.
+   */
+  role?: string;
   email?: string;
   name?: string;
   iat?: number;
@@ -62,10 +67,20 @@ export async function verifyToken(token: string): Promise<VerifyResult> {
     const options = getVerifyOptions();
     const { payload } = await jose.jwtVerify(token, getJWKS(), options);
 
+    // Narrowed, not asserted. The claim is arbitrary until checked, and
+    // canonicalizeRole is fail-closed, so an unrecognized or non-string value
+    // becomes null rather than a WXYCRole the type system now believes in.
+    // That also keeps consumers total: roleToAuthorization calls
+    // .toLowerCase(), so handing it an unchecked claim throws.
+    const role =
+      typeof payload.role === "string"
+        ? canonicalizeRole(payload.role) ?? null
+        : null;
+
     return {
       authenticated: true,
       payload: payload as JWTPayload,
-      role: (payload.role as WXYCRole) ?? null,
+      role,
     };
   } catch (error) {
     if (error instanceof jose.errors.JWTExpired) {
