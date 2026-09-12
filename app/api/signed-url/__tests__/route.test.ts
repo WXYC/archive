@@ -301,20 +301,13 @@ describe("POST /api/signed-url", () => {
     });
   });
 
-  // The deployed bundle ships with NEXT_PUBLIC_AUTH_USERNAME/PASSWORD baked in,
-  // which puts every user on the simple-auth code path. That path doesn't
-  // produce a JWT, so without this bypass the server treats authenticated
-  // users as anonymous and refuses anything older than the public window.
-  describe("simple-auth bearer bypass", () => {
-    beforeEach(() => {
-      vi.stubEnv("NEXT_PUBLIC_AUTH_USERNAME", "wxycarch");
-      vi.stubEnv("NEXT_PUBLIC_AUTH_PASSWORD", "shared-archive-password");
-    });
-
-    afterEach(() => {
-      vi.unstubAllEnvs();
-    });
-
+  // The shared-password bypass (NEXT_PUBLIC_AUTH_USERNAME/PASSWORD) was live in
+  // production from 2026-03-29 to 2026-09-12. Because NEXT_PUBLIC_* values are
+  // inlined into client JS, that password was publicly readable, so anyone who
+  // sent it as a bearer token got the full 90-day DJ range. It is gone. These
+  // tests pin that it stays gone: re-introducing the env vars must not
+  // resurrect it, and a verified JWT is the only path to DJ range.
+  describe("retired shared-password bypass", () => {
     function keyForDaysAgo(daysAgo: number): string {
       const date = new Date();
       date.setDate(date.getDate() - daysAgo);
@@ -324,28 +317,13 @@ describe("POST /api/signed-url", () => {
       return `${year}/${month}/${day}/${year}${month}${day}1200.mp3`;
     }
 
-    it("grants DJ-range access when Bearer token matches the configured simple-auth password", async () => {
-      const response = await callRoute(
-        { key: keyForDaysAgo(60) },
-        "Bearer shared-archive-password"
-      );
-
-      expect(response.status).toBe(200);
-      const data = await response.json();
-      expect(data.url).toBe("https://s3.example.com/signed-url");
-      expect(mockVerifyAuthHeader).not.toHaveBeenCalled();
+    afterEach(() => {
+      vi.unstubAllEnvs();
     });
 
-    it("still enforces the 90-day cap under simple-auth", async () => {
-      const response = await callRoute(
-        { key: keyForDaysAgo(100) },
-        "Bearer shared-archive-password"
-      );
-
-      expect(response.status).toBe(403);
-    });
-
-    it("falls back to JWT verification when Bearer token does not match", async () => {
+    it("does not grant DJ range for the retired password, even with the env vars set", async () => {
+      vi.stubEnv("NEXT_PUBLIC_AUTH_USERNAME", "wxycarch");
+      vi.stubEnv("NEXT_PUBLIC_AUTH_PASSWORD", "shared-archive-password");
       mockVerifyAuthHeader.mockResolvedValue({
         authenticated: false,
         error: "Invalid signature",
@@ -353,48 +331,26 @@ describe("POST /api/signed-url", () => {
 
       const response = await callRoute(
         { key: keyForDaysAgo(60) },
-        "Bearer some-other-token"
-      );
-
-      expect(response.status).toBe(403);
-      expect(mockVerifyAuthHeader).toHaveBeenCalledWith("Bearer some-other-token");
-    });
-
-    it("does not grant access when env var is empty, even if Bearer token is empty", async () => {
-      vi.stubEnv("NEXT_PUBLIC_AUTH_PASSWORD", "");
-      mockVerifyAuthHeader.mockResolvedValue({
-        authenticated: false,
-        error: "No authorization header",
-      });
-
-      const response = await callRoute({ key: keyForDaysAgo(60) }, "Bearer ");
-
-      expect(response.status).toBe(403);
-    });
-
-    it("does not grant access when env var is set but USERNAME is missing (mirrors client useSimpleAuth)", async () => {
-      // PASSWORD is stubbed by the surrounding beforeEach. Explicitly clear
-      // USERNAME so the simple-auth pair is incomplete.
-      vi.stubEnv("NEXT_PUBLIC_AUTH_USERNAME", "");
-      mockVerifyAuthHeader.mockResolvedValue({
-        authenticated: false,
-        error: "Token verification failed",
-      });
-
-      const response = await callRoute(
-        { key: keyForDaysAgo(60) },
         "Bearer shared-archive-password"
       );
 
       expect(response.status).toBe(403);
+      // The token must reach JWT verification like any other bearer, rather
+      // than being short-circuited by an env-var comparison.
+      expect(mockVerifyAuthHeader).toHaveBeenCalledWith(
+        "Bearer shared-archive-password"
+      );
     });
 
+    // Header-parsing coverage, retained from the deleted bypass suite and
+    // retargeted at an arbitrary token: only a well-formed "Bearer <token>"
+    // reaches verification, and none of these grant anything either way.
     it.each([
-      ["lowercase prefix", "bearer shared-archive-password"],
-      ["no space after Bearer", "Bearershared-archive-password"],
-      ["different scheme", "Token shared-archive-password"],
+      ["lowercase prefix", "bearer some-other-token"],
+      ["no space after Bearer", "Bearersome-other-token"],
+      ["different scheme", "Token some-other-token"],
     ])(
-      "does not match Bearer with %s",
+      "does not grant DJ range for a malformed header: %s",
       async (_label, malformedHeader) => {
         mockVerifyAuthHeader.mockResolvedValue({
           authenticated: false,
