@@ -61,8 +61,15 @@ export async function POST(request: Request) {
   // can legitimately arrive as an elevated alias ("admin", "owner"), which
   // ranks at stationManager and so clears the DJ bar. isDJRole matches the
   // three canonical names exactly and would refuse those.
+  // The typeof guard is load-bearing, not defensive noise: verifyToken casts
+  // the `role` claim rather than checking it, and canonicalizeRole calls
+  // .toLowerCase() on whatever arrives — so a signature-valid token carrying a
+  // number, array or object as `role` would throw here. This runs outside the
+  // route's try block, so that throw became a 500 instead of the quiet
+  // fallback to the public window. isDJRole was total and simply said false.
   const hasDJAccess =
     verifyResult.authenticated &&
+    typeof verifyResult.role === "string" &&
     roleToAuthorization(verifyResult.role) >= Authorization.DJ;
 
   // Get appropriate date range based on authentication
