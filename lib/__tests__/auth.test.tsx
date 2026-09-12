@@ -513,6 +513,36 @@ describe("AuthProvider", () => {
         );
       });
     });
+
+    // The session fetch that follows a successful credential check rejects
+    // outright when the connection drops — better-auth's client issues a bare
+    // fetch and never enables better-fetch's catchAllError. The DJ has to see
+    // an error, not an unhandled rejection that leaves the dialog mid-submit.
+    it("reports a failure when the post-sign-in session fetch rejects", async () => {
+      const user = userEvent.setup();
+      mockGetSession
+        .mockResolvedValueOnce({ data: null })
+        .mockRejectedValue(new TypeError("Failed to fetch"));
+      mockSignInUsername.mockResolvedValue({ error: null });
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Login"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-login-result")).toBe(
+          "Could not verify your archive access. Please try again."
+        );
+      });
+    });
   });
 
   // The shared archive account was retired 2026-09-12. Anyone still typing it
@@ -778,6 +808,32 @@ describe("AuthProvider", () => {
         );
       });
       expect(mockGetSession).not.toHaveBeenCalled();
+    });
+
+    it("reports a failure when the session fetch rejects after a valid code", async () => {
+      const user = userEvent.setup();
+      mockSignInWithOtp.mockResolvedValue({ ok: true });
+      mockGetSession
+        .mockResolvedValueOnce({ data: null })
+        .mockRejectedValue(new TypeError("Failed to fetch"));
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Verify Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-verify-code")).toBe(
+          "Could not verify your archive access. Please try again."
+        );
+      });
     });
   });
 

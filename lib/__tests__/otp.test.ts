@@ -100,6 +100,17 @@ describe("sendVerificationOtp", () => {
 
     expect(result.ok).toBe(false);
   });
+
+  it("surfaces the auth proxy's own failure wording", async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({ error: "Auth service unavailable" }, 502)
+    );
+
+    await expect(sendVerificationOtp("dj@wxyc.org")).resolves.toEqual({
+      ok: false,
+      error: "Auth service unavailable",
+    });
+  });
 });
 
 describe("signInWithOtp", () => {
@@ -160,5 +171,35 @@ describe("signInWithOtp", () => {
 
     expect(result.ok).toBe(false);
     expect(result).toHaveProperty("error", expect.any(String));
+  });
+
+  // A code that is present but useless must not win over the server's message.
+  // An empty string is not nullish, and a plain object answers to every key on
+  // Object.prototype, so both need an own-property check to fall through.
+  it.each([
+    ["an empty code", ""],
+    ["a code that names an inherited property", "constructor"],
+  ])("falls through to the server's message for %s", async (_label, code) => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({ code, message: "Upstream said this" }, 400)
+    );
+
+    await expect(signInWithOtp("dj@wxyc.org", "000000")).resolves.toEqual({
+      ok: false,
+      error: "Upstream said this",
+    });
+  });
+
+  // The brute-force limiter in front of the auth service and this app's own
+  // /auth proxy both answer in `error` rather than better-auth's `message`.
+  it("surfaces a rate-limit refusal instead of a generic retry prompt", async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({ error: "Too many requests, please try again later." }, 429)
+    );
+
+    await expect(signInWithOtp("dj@wxyc.org", "000000")).resolves.toEqual({
+      ok: false,
+      error: "Too many requests, please try again later.",
+    });
   });
 });

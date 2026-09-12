@@ -223,36 +223,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * How the credentials were proven — password today, an emailed code or a
    * scanned QR later — has no bearing on who gets archive access, so the
    * decision lives in exactly one place.
+   *
+   * Never throws: every caller gets a LoginResult it can render.
    */
   const completeSignIn = useCallback(async (): Promise<LoginResult> => {
-    const sessionResult = await authClient.getSession();
-    if (!sessionResult.data?.session || !sessionResult.data?.user) {
-      return { success: false, error: "Login failed" };
-    }
+    try {
+      const sessionResult = await authClient.getSession();
+      if (!sessionResult.data?.session || !sessionResult.data?.user) {
+        return { success: false, error: "Login failed" };
+      }
 
-    setSession(sessionResult.data.session);
-    setUser(sessionResult.data.user as User);
+      setSession(sessionResult.data.session);
+      setUser(sessionResult.data.user as User);
 
-    const roleResult = await resolveStationRole();
+      const roleResult = await resolveStationRole();
 
-    if (roleResult.status !== "ok") {
-      // Couldn't fetch or decode the token — a transient/system failure, not
-      // an authorization decision. Don't tell a DJ they lack access when we
-      // simply couldn't check.
+      if (roleResult.status !== "ok") {
+        // Couldn't fetch or decode the token — a transient/system failure, not
+        // an authorization decision. Don't tell a DJ they lack access when we
+        // simply couldn't check.
+        return {
+          success: false,
+          error: "Could not verify your archive access. Please try again.",
+        };
+      }
+
+      if (!isDJRole(roleResult.role)) {
+        return {
+          success: false,
+          error: "Your account does not have archive access",
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      // authClient.getSession() rejects rather than returning an error result
+      // when the connection drops: better-auth's client does a bare
+      // `await fetch` and never enables better-fetch's catchAllError. That is
+      // the same "we could not check" situation as an unavailable role, so it
+      // gets the same answer instead of escaping to the caller.
+      console.error("Post-sign-in check failed:", error);
       return {
         success: false,
         error: "Could not verify your archive access. Please try again.",
       };
     }
-
-    if (!isDJRole(roleResult.role)) {
-      return {
-        success: false,
-        error: "Your account does not have archive access",
-      };
-    }
-
-    return { success: true };
   }, [resolveStationRole]);
 
   const login = useCallback(

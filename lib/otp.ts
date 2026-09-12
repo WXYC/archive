@@ -32,7 +32,7 @@ const OTP_ERROR_COPY: Record<string, string> = {
   TOO_MANY_ATTEMPTS: "Too many attempts. Please request a new code.",
 };
 
-type AuthErrorBody = { code?: unknown; message?: unknown };
+type AuthErrorBody = { code?: unknown; message?: unknown; error?: unknown };
 
 /** Read a JSON body without throwing on an empty or non-JSON response. */
 async function readJson(response: Response): Promise<unknown> {
@@ -43,9 +43,22 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+/**
+ * The most specific thing the server said, or `fallback` if it said nothing.
+ *
+ * better-auth reports in `message`, but two other things answer on these same
+ * paths and report in `error`: the shared brute-force limiter in front of the
+ * auth service, and this app's own /auth proxy when upstream is unreachable.
+ * Reading only `message` would turn "Too many requests, please try again
+ * later." into a generic retry prompt — the one that invites the retry that
+ * deepens the block.
+ */
 function messageFrom(body: unknown, fallback: string): string {
-  const message = (body as AuthErrorBody | null)?.message;
-  return typeof message === "string" && message.length > 0 ? message : fallback;
+  const parsed = body as AuthErrorBody | null;
+  const said = [parsed?.message, parsed?.error].find(
+    (value): value is string => typeof value === "string" && value.length > 0
+  );
+  return said ?? fallback;
 }
 
 async function postJson(path: string, payload: unknown): Promise<Response> {
@@ -136,10 +149,20 @@ export async function signInWithOtp(
     const body = (await readJson(response)) as AuthErrorBody | null;
     const code = typeof body?.code === "string" ? body.code : undefined;
 
+    // Own properties only. `??` on its own is not enough here: the `&&` form
+    // yields "" for an empty `code`, and "" is not nullish, so the user would
+    // be shown a blank error; and a plain object answers to inherited keys
+    // like "constructor" with a function. Both fall through to the server's
+    // own wording instead.
+    const copy =
+      code !== undefined && Object.hasOwn(OTP_ERROR_COPY, code)
+        ? OTP_ERROR_COPY[code]
+        : undefined;
+
     return {
       ok: false,
       error:
-        (code && OTP_ERROR_COPY[code]) ??
+        copy ??
         messageFrom(body, "Could not verify that code. Please try again."),
     };
   } catch {
