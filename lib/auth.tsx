@@ -47,11 +47,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export { DJ_ROLES, isDJRole };
 
-const SIMPLE_AUTH_KEY = "wxyc-archive-auth";
-const useSimpleAuth =
-  !!process.env.NEXT_PUBLIC_AUTH_USERNAME &&
-  !!process.env.NEXT_PUBLIC_AUTH_PASSWORD;
-
 // Tolerance for client/server clock skew when treating a decoded JWT as
 // expired. We only discard a token that is expired by more than this, so a
 // slightly fast client clock never logs out a DJ who is holding a token the
@@ -114,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [simpleAuthed, setSimpleAuthed] = useState(false);
   const [stationRole, setStationRole] = useState<string | null>(null);
 
   // Cache the JWT fetched while resolving the station role so getToken() can
@@ -125,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     expiresAt: number | null;
   } | null>(null);
 
-  const isAuthenticated = useSimpleAuth ? simpleAuthed : isDJRole(stationRole);
+  const isAuthenticated = isDJRole(stationRole);
 
   // Resolve the station role, then sync both the gating state and the token
   // cache. Returns the result so callers can distinguish "not a DJ" from
@@ -148,12 +142,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Check session on mount
   useEffect(() => {
-    if (useSimpleAuth) {
-      setSimpleAuthed(localStorage.getItem(SIMPLE_AUTH_KEY) === "true");
-      setIsLoading(false);
-      return;
-    }
-
     const checkSession = async () => {
       try {
         const { data } = await authClient.getSession();
@@ -174,18 +162,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (usernameOrEmail: string, password: string): Promise<LoginResult> => {
-      if (useSimpleAuth) {
-        if (
-          usernameOrEmail === process.env.NEXT_PUBLIC_AUTH_USERNAME &&
-          password === process.env.NEXT_PUBLIC_AUTH_PASSWORD
-        ) {
-          setSimpleAuthed(true);
-          localStorage.setItem(SIMPLE_AUTH_KEY, "true");
-          return { success: true };
-        }
-        return { success: false, error: "Invalid credentials" };
-      }
-
       try {
         // Determine if input is email or username
         const isEmail = usernameOrEmail.includes("@");
@@ -249,12 +225,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    if (useSimpleAuth) {
-      setSimpleAuthed(false);
-      localStorage.removeItem(SIMPLE_AUTH_KEY);
-      return;
-    }
-
     try {
       await authClient.signOut();
     } catch (error) {
@@ -268,13 +238,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const getToken = useCallback(async (): Promise<string | null> => {
-    if (useSimpleAuth) {
-      // The server route recognizes the simple-auth password as a Bearer
-      // token and grants DJ-range access. Without this, simple-auth users
-      // see the 90-day calendar but the server refuses anything past the
-      // public window. `useSimpleAuth` already proves the env var is set.
-      return simpleAuthed ? process.env.NEXT_PUBLIC_AUTH_PASSWORD! : null;
-    }
     if (!session) return null;
 
     // Reuse the JWT already fetched while resolving the station role, unless
@@ -289,7 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return cached.value;
     }
     return getJWTToken();
-  }, [session, simpleAuthed]);
+  }, [session]);
 
   return (
     <AuthContext.Provider
