@@ -108,7 +108,11 @@ GitHub Actions workflow (`.github/workflows/deploy.yml`):
 1. **test** job: `npm ci`, `tsc --noEmit`, `npm run lint`, `npm test`
 2. **build-and-deploy** job: OpenNext build, then `wrangler deploy` on push to `main`
 
-Runtime secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `BETTER_AUTH_JWKS_URL`, `LML_API_KEY`, etc.) are set on the Cloudflare Worker directly, not in GitHub.
+Runtime **secrets** (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `BETTER_AUTH_JWKS_URL`, `LML_API_KEY`) are set on the Cloudflare Worker directly (`wrangler secret put`), not in GitHub. They are write-only: `wrangler secret list` returns names, never values.
+
+Runtime config that is **not** secret lives in `wrangler.jsonc` under `vars` and deploys with the code — currently `BETTER_AUTH_ISSUER` and `BETTER_AUTH_AUDIENCE`. Prefer `vars` whenever a value is not actually a secret: it is version-controlled, reviewable in a diff, and readable when something breaks, where a secret can only be overwritten blind. Run `npm run cf-typegen` after changing them.
+
+Note the two stores are separate from the org's `secrets` repo, whose `update-secrets.sh` fans out to GitHub Actions/Dependabot/org secrets only — it never writes to a Cloudflare Worker. A rotation there does not reach this app's runtime.
 
 ## Code Conventions
 

@@ -21,7 +21,7 @@ Copy `.env.example` to `.env` and fill in the values:
 | `BETTER_AUTH_URL` | Server-side auth proxy destination (used by `next.config.ts` rewrites) |
 | `NEXT_PUBLIC_BETTER_AUTH_URL` | Client-side auth URL (same-origin `/auth` proxy used automatically when origins differ) |
 | `BETTER_AUTH_JWKS_URL` | JWKS endpoint for JWT verification |
-| `BETTER_AUTH_ISSUER` | Expected `iss` claim. Optional — unset, tokens are verified by signature alone. Use the **origin** of the auth service's base URL (`https://api.wxyc.org`), not the `/auth` path |
+| `BETTER_AUTH_ISSUER` | Expected `iss` claim. Set for production in `wrangler.jsonc` under `vars`; set here only to exercise it locally. Use the **origin** of the auth service's base URL (`https://api.wxyc.org`), not the `/auth` path |
 | `BETTER_AUTH_AUDIENCE` | Expected `aud` claim. Same value and same caveat as `BETTER_AUTH_ISSUER` |
 | `NEXT_PUBLIC_QR_LOGIN_ENABLED` | Gates QR (RFC 8628 device-authorization) sign-in. Defaults to off; `"true"` or `"1"` enables it. Must be enabled on dj.wxyc.org too — that is where approval happens. Also needs listing in `deploy.yml`'s build `env:` block, or it never reaches the bundle |
 | `BACKEND_URL` | Backend-Service origin serving `GET /flowsheet/range`, the daily playlist's data source. Defaults to `https://api.wxyc.org`, so set it only to point at a staging Backend |
