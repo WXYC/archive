@@ -28,8 +28,12 @@ type User = {
   id: string;
   name: string;
   email: string;
+  // Deliberately NOT WXYCRole: this is the admin-plugin field described above,
+  // whose values are "admin" or null — and "admin" is not a WXYCRole member.
+  // Typing it as one would make `user.role === "stationManager"` compile as
+  // though it meant something, which is the confusion #100 was about.
   image?: string | null;
-  role?: WXYCRole;
+  role?: string | null;
 };
 
 /**

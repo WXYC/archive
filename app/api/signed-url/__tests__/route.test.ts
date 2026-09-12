@@ -6,25 +6,17 @@ vi.mock("@/lib/jwt-utils", () => ({
   verifyAuthHeader: (header: string | null) => mockVerifyAuthHeader(header),
 }));
 
-// Mock roleToAuthorization and Authorization
-vi.mock("@wxyc/shared/auth-client/auth", () => ({
-  Authorization: { NO: 0, DJ: 1, MD: 2, SM: 3, ADMIN: 4 },
-  roleToAuthorization: (role: string | null | undefined) => {
-    if (!role) return 0;
-    switch (role) {
-      case "admin":
-        return 4;
-      case "stationManager":
-        return 3;
-      case "musicDirector":
-        return 2;
-      case "dj":
-        return 1;
-      default:
-        return 0;
-    }
-  },
-}));
+// Authorization and roleToAuthorization are pure and dependency-free, and the
+// ranking under test IS their behavior. The hand-written stand-in that used to
+// live here invented an Authorization.ADMIN = 4 that does not exist and ranked
+// "admin" as 4; the real enum is NO/DJ/MD/SM and canonicalizes "admin" to
+// stationManager = 3. A test pinned to the copy would stay green if the real
+// alias table changed underneath it.
+vi.mock("@wxyc/shared/auth-client/auth", async () =>
+  vi.importActual<typeof import("@wxyc/shared/auth-client/auth")>(
+    "@wxyc/shared/auth-client/auth"
+  )
+);
 
 // Mock S3 client
 const mockGetSignedUrl = vi.fn();
@@ -244,6 +236,36 @@ describe("POST /api/signed-url", () => {
       );
 
       expect(response.status).toBe(200);
+    });
+
+    // A malformed claim must deny quietly, not crash. canonicalizeRole calls
+    // .toLowerCase() on whatever it is handed and verifyToken casts the claim
+    // rather than checking it, so without the typeof guard these throw — and
+    // the gate runs outside the route's try block, so the throw surfaced as a
+    // 500 rather than the normal fallback to the public window.
+    it.each([
+      ["a number", 42],
+      ["an array", ["dj"]],
+      ["an object", { role: "dj" }],
+      ["a boolean", true],
+    ])("falls back to the public window for %s role claim", async (_l, role) => {
+      mockVerifyAuthHeader.mockResolvedValue({
+        authenticated: true,
+        payload: { sub: "odd-1", role },
+        role,
+      });
+
+      const date = new Date();
+      date.setDate(date.getDate() - 60);
+      const year = date.getFullYear();
+      const month = (date.getMonth() + 1).toString().padStart(2, "0");
+      const day = date.getDate().toString().padStart(2, "0");
+      const key = `${year}/${month}/${day}/${year}${month}${day}1200.mp3`;
+
+      const response = await callRoute({ key }, "Bearer valid-jwt-token");
+
+      // 403 (outside the 14-day public window), never 500.
+      expect(response.status).toBe(403);
     });
 
     it("should deny DJ access to files outside 90-day range", async () => {
