@@ -30,7 +30,16 @@ type User = {
   role?: string;
 };
 
-type LoginResult = { success: true } | { success: false; error: string };
+/**
+ * Why a sign-in attempt failed, when the dialog needs to present it differently
+ * from an ordinary bad-credentials message. Absent on failures that are just a
+ * wrong username or password.
+ */
+type LoginFailureKind = "retired-shared-credential";
+
+type LoginResult =
+  | { success: true }
+  | { success: false; error: string; kind?: LoginFailureKind };
 
 type AuthContextType = {
   isLoading: boolean;
@@ -46,6 +55,21 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export { DJ_ROLES, isDJRole };
+
+/**
+ * The shared archive account, retired 2026-09-12 along with the build-time
+ * credential path it belonged to.
+ *
+ * Matched on the username alone, never on the password. The retired password
+ * was inlined into the public client bundle for six months, and hard-coding it
+ * here to compare against would put it straight back into the bundle we just
+ * removed it from. The username is not a secret and identifies the attempt on
+ * its own.
+ *
+ * This is transitional. There is no sign-in telemetry in this app, so "nobody
+ * tries it any more" is not observable; revisit on 2027-03-12 and delete.
+ */
+const RETIRED_SHARED_USERNAME = "wxycarch";
 
 // Tolerance for client/server clock skew when treating a decoded JWT as
 // expired. We only discard a token that is expired by more than this, so a
@@ -162,6 +186,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (usernameOrEmail: string, password: string): Promise<LoginResult> => {
+      // Short-circuit before touching the network: this account cannot
+      // authenticate any more, and better-auth's generic "invalid username or
+      // password" would not tell a returning DJ what actually changed.
+      if (
+        usernameOrEmail.trim().toLowerCase() === RETIRED_SHARED_USERNAME
+      ) {
+        return {
+          success: false,
+          kind: "retired-shared-credential",
+          error:
+            "The shared archive login has been retired. Sign in with your own WXYC DJ account — if you don't have one yet, you can set it up at dj.wxyc.org.",
+        };
+      }
+
       try {
         // Determine if input is email or username
         const isEmail = usernameOrEmail.includes("@");

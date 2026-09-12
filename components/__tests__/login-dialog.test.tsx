@@ -242,6 +242,55 @@ describe("LoginDialog", () => {
       });
     });
 
+    it("presents the retired shared credential as an alert, not a field error", async () => {
+      const user = userEvent.setup();
+      mockLogin.mockResolvedValue({
+        success: false,
+        kind: "retired-shared-credential",
+        error:
+          "The shared archive login has been retired. Sign in with your own WXYC DJ account — if you don't have one yet, you can set it up at dj.wxyc.org.",
+      });
+
+      render(<LoginDialog />);
+
+      await user.click(screen.getByRole("button", { name: /dj sign in/i }));
+      await user.type(screen.getByLabelText(/username or email/i), "wxycarch");
+      await user.type(screen.getByLabelText(/password/i), "allthesignal");
+      await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+      // role=alert is the load-bearing part: this is guidance about what
+      // changed, not a "you typed it wrong" message, and screen readers
+      // should announce it as such.
+      const alert = await screen.findByRole("alert");
+      expect(alert).toHaveTextContent(/retired/i);
+
+      // And it offers a way to act on the guidance.
+      const link = screen.getByRole("link", { name: /dj\.wxyc\.org/i });
+      expect(link).toHaveAttribute("href", "https://dj.wxyc.org");
+    });
+
+    it("renders an ordinary failure as a plain message with no alert role", async () => {
+      const user = userEvent.setup();
+      mockLogin.mockResolvedValue({
+        success: false,
+        error: "Invalid username or password",
+      });
+
+      render(<LoginDialog />);
+
+      await user.click(screen.getByRole("button", { name: /dj sign in/i }));
+      await user.type(screen.getByLabelText(/username or email/i), "someone");
+      await user.type(screen.getByLabelText(/password/i), "nope");
+      await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Invalid username or password")
+        ).toBeInTheDocument();
+      });
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
     it("keeps dialog open on failed login", async () => {
       const user = userEvent.setup();
       mockLogin.mockResolvedValue({
