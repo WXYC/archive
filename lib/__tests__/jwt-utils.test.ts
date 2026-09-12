@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { verifyToken, verifyAuthHeader } from "../jwt-utils";
 import * as jose from "jose";
 
@@ -15,6 +15,118 @@ vi.mock("jose", async () => {
 describe("jwt-utils", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  // Claim validation is opt-in through env vars. Unset, verification is by
+  // signature alone — which is the behavior that shipped before these vars
+  // existed, so an unconfigured deployment keeps working rather than locking
+  // everyone out the moment this lands.
+  describe("issuer and audience claim validation", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    /** Fresh module instance, so the once-only warning flag starts unset. */
+    async function freshModule() {
+      vi.resetModules();
+      return import("../jwt-utils");
+    }
+
+    function mockVerifyOk() {
+      vi.mocked(jose.jwtVerify).mockResolvedValue({
+        payload: { sub: "user-123", role: "dj" },
+        protectedHeader: { alg: "EdDSA" },
+        key: new Uint8Array(),
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
+    }
+
+    it("passes both claims to jose when configured", async () => {
+      vi.stubEnv("BETTER_AUTH_ISSUER", "https://api.wxyc.org");
+      vi.stubEnv("BETTER_AUTH_AUDIENCE", "https://api.wxyc.org");
+      mockVerifyOk();
+      const { verifyToken: verify } = await freshModule();
+
+      await verify("token");
+
+      const [token, , options] = vi.mocked(jose.jwtVerify).mock.calls[0];
+      expect(token).toBe("token");
+      expect(options).toEqual({
+        issuer: "https://api.wxyc.org",
+        audience: "https://api.wxyc.org",
+      });
+    });
+
+    it("verifies by signature alone when neither is set", async () => {
+      vi.stubEnv("BETTER_AUTH_ISSUER", "");
+      vi.stubEnv("BETTER_AUTH_AUDIENCE", "");
+      mockVerifyOk();
+      const { verifyToken: verify } = await freshModule();
+
+      await verify("token");
+
+      const options = vi.mocked(jose.jwtVerify).mock.calls[0][2];
+      expect(options).toEqual({});
+    });
+
+    it("passes whichever claim is configured when only one is", async () => {
+      vi.stubEnv("BETTER_AUTH_ISSUER", "https://api.wxyc.org");
+      vi.stubEnv("BETTER_AUTH_AUDIENCE", "");
+      mockVerifyOk();
+      const { verifyToken: verify } = await freshModule();
+
+      await verify("token");
+
+      const options = vi.mocked(jose.jwtVerify).mock.calls[0][2];
+      expect(options).toEqual({ issuer: "https://api.wxyc.org" });
+    });
+
+    it("warns once about a partial configuration, not on every call", async () => {
+      vi.stubEnv("BETTER_AUTH_ISSUER", "https://api.wxyc.org");
+      vi.stubEnv("BETTER_AUTH_AUDIENCE", "");
+      mockVerifyOk();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { verifyToken: verify } = await freshModule();
+
+      await verify("token");
+      await verify("token");
+      await verify("token");
+
+      // Once per process: this runs on every signed-url request, and a warning
+      // per request would bury the logs it is meant to stand out in.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toMatch(/BETTER_AUTH_AUDIENCE/);
+      warn.mockRestore();
+    });
+
+    it("stays quiet when fully configured", async () => {
+      vi.stubEnv("BETTER_AUTH_ISSUER", "https://api.wxyc.org");
+      vi.stubEnv("BETTER_AUTH_AUDIENCE", "https://api.wxyc.org");
+      mockVerifyOk();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { verifyToken: verify } = await freshModule();
+
+      await verify("token");
+
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it("rejects a token whose issuer does not match", async () => {
+      vi.stubEnv("BETTER_AUTH_ISSUER", "https://api.wxyc.org");
+      vi.stubEnv("BETTER_AUTH_AUDIENCE", "https://api.wxyc.org");
+      vi.mocked(jose.jwtVerify).mockRejectedValue(
+        new jose.errors.JWTClaimValidationFailed(
+          'unexpected "iss" claim value',
+          {} as jose.JWTPayload,
+          "iss"
+        )
+      );
+      const { verifyToken: verify } = await freshModule();
+
+      const result = await verify("token-from-elsewhere");
+
+      expect(result.authenticated).toBe(false);
+    });
   });
 
   describe("verifyToken", () => {

@@ -75,6 +75,7 @@ See `.env.example`. Key variables:
 - `BETTER_AUTH_URL` -- server-side auth proxy destination (used by next.config.ts rewrites)
 - `NEXT_PUBLIC_BETTER_AUTH_URL` -- client-side auth URL (baked into bundle)
 - `BETTER_AUTH_JWKS_URL` -- JWKS endpoint for JWT verification
+- `BETTER_AUTH_ISSUER` / `BETTER_AUTH_AUDIENCE` -- expected `iss` and `aud` claims. Optional: unset, `verifyToken` checks the signature only and warns once. Both are the **origin** of the auth service's base URL (`https://api.wxyc.org`) -- better-auth's jwt plugin defaults both claims to that origin with the path stripped, so `https://api.wxyc.org/auth` is wrong and would reject every token
 - `BACKEND_URL` -- Backend-Service origin serving `GET /flowsheet/range` (the daily playlist source). Defaults to `https://api.wxyc.org`; set it only to point a local build at a staging Backend
 - `LML_API_KEY` -- bearer token for library-metadata-lookup artwork enrichment (org-wide shared key; LML returns 401 without it and artwork lookups silently come back empty)
 
