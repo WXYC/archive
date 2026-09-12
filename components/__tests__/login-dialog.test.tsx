@@ -676,7 +676,8 @@ describe("LoginDialog", () => {
       await openDialog(user);
       await user.click(screen.getByRole("button", { name: /qr code/i }));
 
-      expect(screen.getByText("qr-stage")).toBeInTheDocument();
+      // The QR stage is code-split, so it arrives a tick after the switch.
+      expect(await screen.findByText("qr-stage")).toBeInTheDocument();
 
       await user.click(
         screen.getByRole("button", { name: /stub use password/i })

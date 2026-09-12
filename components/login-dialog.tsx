@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { isQrLoginEnabled } from "@/lib/flags";
-import { QrSignIn } from "@/components/qr-sign-in";
+
+/**
+ * Fetched only when a DJ actually reaches the QR stage.
+ *
+ * `qrcode` is around 10 kB gzipped, does not tree-shake (it is CJS, so both
+ * the canvas and SVG renderers ship), and builds its Galois-field tables at
+ * module init. This dialog mounts on every page view, so a static import
+ * would put the whole encoder in front of every listener while the feature is
+ * still dark. `ssr: false` keeps it out of the Worker bundle as well — the
+ * Node entry drags in `pngjs`/`zlib`, and `toDataURL` only ever runs in a
+ * browser.
+ */
+const QrSignIn = dynamic(
+  () => import("@/components/qr-sign-in").then((m) => m.QrSignIn),
+  { ssr: false }
+);
 
 type LoginMethod = "otp" | "password" | "qr";
 
@@ -81,11 +97,11 @@ export function LoginDialog() {
   const [notice, setNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const clearFeedback = () => {
+  const clearFeedback = useCallback(() => {
     setError("");
     setErrorKind(null);
     setNotice("");
-  };
+  }, []);
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
@@ -109,21 +125,33 @@ export function LoginDialog() {
     }
   };
 
-  const switchMethod = (next: LoginMethod) => {
-    setMethod(next);
-    savePreferredMethod(next);
-    setCodeSentTo(null);
-    setCode("");
-    clearFeedback();
-  };
+  const switchMethod = useCallback(
+    (next: LoginMethod) => {
+      setMethod(next);
+      savePreferredMethod(next);
+      setCodeSentTo(null);
+      setCode("");
+      clearFeedback();
+    },
+    [clearFeedback]
+  );
 
-  const finishSignedIn = () => {
+  // Stable identities, because the QR stage holds a live device grant and a
+  // poll timer keyed on nothing else. QrSignIn guards itself against a caller
+  // that hands it a fresh closure every render; this keeps the one real caller
+  // from relying on that guard in the first place.
+  const finishSignedIn = useCallback(() => {
     setIsOpen(false);
     setUsernameOrEmail("");
     setPassword("");
     setCode("");
     setCodeSentTo(null);
-  };
+  }, []);
+
+  const handleUsePassword = useCallback(
+    () => switchMethod("password"),
+    [switchMethod]
+  );
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -307,7 +335,7 @@ export function LoginDialog() {
         {method === "qr" ? (
           <QrSignIn
             onSignedIn={finishSignedIn}
-            onUsePassword={() => switchMethod("password")}
+            onUsePassword={handleUsePassword}
           />
         ) : method === "password" ? (
           <form onSubmit={handlePasswordSubmit} className="space-y-4">

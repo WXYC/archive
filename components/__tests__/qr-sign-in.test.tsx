@@ -21,8 +21,13 @@ vi.mock("@/lib/device-auth", async () => {
   };
 });
 
+// A fresh wrapper per render, deliberately: the real context value is a new
+// object literal on every AuthProvider render, and the component must not
+// restart its device grant because a callback's identity moved.
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ completeSignIn: mockCompleteSignIn }),
+  useAuth: () => ({
+    completeSignIn: (...args: unknown[]) => mockCompleteSignIn(...args),
+  }),
 }));
 
 vi.mock("qrcode", () => ({
@@ -59,8 +64,13 @@ afterEach(() => {
 function renderQr() {
   const onSignedIn = vi.fn();
   const onUsePassword = vi.fn();
-  render(<QrSignIn onSignedIn={onSignedIn} onUsePassword={onUsePassword} />);
-  return { onSignedIn, onUsePassword };
+  return {
+    onSignedIn,
+    onUsePassword,
+    ...render(
+      <QrSignIn onSignedIn={onSignedIn} onUsePassword={onUsePassword} />
+    ),
+  };
 }
 
 const pending = {
@@ -192,9 +202,7 @@ describe("QrSignIn", () => {
 
   it("stops polling once unmounted", async () => {
     mockPollDeviceToken.mockResolvedValue(pending);
-    const { unmount } = render(
-      <QrSignIn onSignedIn={vi.fn()} onUsePassword={vi.fn()} />
-    );
+    const { unmount } = renderQr();
 
     await screen.findByRole("img");
     await vi.advanceTimersByTimeAsync(TICK);
@@ -204,5 +212,132 @@ describe("QrSignIn", () => {
     await vi.advanceTimersByTimeAsync(TICK * 4);
 
     expect(mockPollDeviceToken).toHaveBeenCalledTimes(callsBefore);
+  });
+
+  it("keeps one device code across parent re-renders that change prop identity", async () => {
+    mockPollDeviceToken.mockResolvedValue(pending);
+    // The real caller sits inside the archive page, which re-renders about
+    // once a second while audio plays. Each render used to hand QrSignIn a new
+    // `finishSignedIn` closure and restart the flow, replacing the QR the DJ
+    // was mid-scan and hammering /auth/device/code.
+    const { rerender } = render(
+      <QrSignIn onSignedIn={() => {}} onUsePassword={() => {}} />
+    );
+
+    await screen.findByRole("img");
+
+    for (let i = 0; i < 5; i++) {
+      rerender(<QrSignIn onSignedIn={() => {}} onUsePassword={() => {}} />);
+    }
+    await vi.advanceTimersByTimeAsync(TICK);
+
+    expect(mockRequestDeviceCode).toHaveBeenCalledTimes(1);
+    expect(mockPollDeviceToken).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("L22TDY5F")).toBeInTheDocument();
+  });
+
+  it("polls through transient failures instead of ending the flow", async () => {
+    mockPollDeviceToken
+      // A dropped packet.
+      .mockRejectedValueOnce(new Error("offline"))
+      // What the /auth proxy returns on a single upstream hiccup.
+      .mockResolvedValueOnce({
+        status: 502,
+        body: { error: "Auth service unavailable" },
+      })
+      .mockResolvedValueOnce({
+        status: 400,
+        body: { error: DeviceAuthTokenErrorCode.server_error },
+      })
+      .mockResolvedValue({ status: 200, body: { access_token: "t" } });
+    mockCompleteSignIn.mockResolvedValue({ success: true });
+    const { onSignedIn } = renderQr();
+
+    await screen.findByRole("img");
+
+    await vi.advanceTimersByTimeAsync(TICK * 3);
+    expect(mockPollDeviceToken).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(TICK);
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalled());
+  });
+
+  it("gives up on an error code the grant cannot recover from", async () => {
+    mockPollDeviceToken.mockResolvedValue({
+      status: 400,
+      body: { error: DeviceAuthTokenErrorCode.invalid_grant },
+    });
+    renderQr();
+
+    await screen.findByRole("img");
+    await vi.advanceTimersByTimeAsync(TICK);
+
+    expect(
+      await screen.findByText(/something went wrong/i)
+    ).toBeInTheDocument();
+    const callsAtFailure = mockPollDeviceToken.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(TICK * 3);
+    expect(mockPollDeviceToken).toHaveBeenCalledTimes(callsAtFailure);
+  });
+
+  it("stops retrying once the grant's own expiry passes", async () => {
+    mockRequestDeviceCode.mockResolvedValue({ ...GRANT, expires_in: 12 });
+    mockPollDeviceToken.mockRejectedValue(new Error("offline"));
+    renderQr();
+
+    await screen.findByRole("img");
+    await vi.advanceTimersByTimeAsync(TICK * 4);
+
+    expect(await screen.findByText(/expired/i)).toBeInTheDocument();
+    const callsAtExpiry = mockPollDeviceToken.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(TICK * 3);
+    expect(mockPollDeviceToken).toHaveBeenCalledTimes(callsAtExpiry);
+  });
+
+  it("reports a failure to verify access rather than stranding the code", async () => {
+    mockPollDeviceToken.mockResolvedValue({ status: 200, body: {} });
+    mockCompleteSignIn.mockRejectedValue(new Error("network"));
+    const { onSignedIn } = renderQr();
+
+    await screen.findByRole("img");
+    await vi.advanceTimersByTimeAsync(TICK);
+
+    expect(
+      await screen.findByText(/could not verify your archive access/i)
+    ).toBeInTheDocument();
+    expect(onSignedIn).not.toHaveBeenCalled();
+  });
+
+  it("ignores a grant interval that would busy-poll", async () => {
+    mockRequestDeviceCode.mockResolvedValue({ ...GRANT, interval: 0 });
+    mockPollDeviceToken.mockResolvedValue(pending);
+    renderQr();
+
+    await screen.findByRole("img");
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockPollDeviceToken).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(TICK);
+    expect(mockPollDeviceToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the password form while the code is still being prepared", async () => {
+    let release: (grant: typeof GRANT) => void = () => {};
+    mockRequestDeviceCode.mockReturnValue(
+      new Promise<typeof GRANT>((resolve) => {
+        release = resolve;
+      })
+    );
+    renderQr();
+
+    expect(screen.getByText(/preparing a code/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /use a password instead/i })
+    ).toBeInTheDocument();
+
+    release(GRANT);
+    await screen.findByRole("img");
   });
 });
