@@ -48,6 +48,7 @@ jobs:
         run: npx opennextjs-cloudflare build
         env:
           NEXT_PUBLIC_BETTER_AUTH_URL: ${{ vars.NEXT_PUBLIC_BETTER_AUTH_URL }}
+          NEXT_PUBLIC_QR_LOGIN_ENABLED: ${{ vars.NEXT_PUBLIC_QR_LOGIN_ENABLED }}
           BETTER_AUTH_URL: ${{ vars.BETTER_AUTH_URL }}
           NEXT_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
           NEXT_PUBLIC_POSTHOG_HOST: ${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}

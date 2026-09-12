@@ -60,6 +60,13 @@ type AuthContextType = {
   login: (usernameOrEmail: string, password: string) => Promise<LoginResult>;
   sendLoginCode: (identifier: string) => Promise<SendCodeResult>;
   verifyLoginCode: (email: string, otp: string) => Promise<LoginResult>;
+  /**
+   * Apply the station-role gate to a session established outside this context
+   * — currently the device-authorization (QR) flow, where better-auth sets the
+   * cookie at the token endpoint and there is no credential call to hang the
+   * gate off.
+   */
+  completeSignIn: () => Promise<LoginResult>;
   logout: () => Promise<void>;
   getToken: () => Promise<string | null>;
 };
@@ -392,6 +399,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         sendLoginCode,
         verifyLoginCode,
+        completeSignIn,
         logout,
         getToken,
       }}

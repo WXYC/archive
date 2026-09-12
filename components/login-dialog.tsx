@@ -12,8 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
+import { isQrLoginEnabled } from "@/lib/flags";
+import { QrSignIn } from "@/components/qr-sign-in";
 
-type LoginMethod = "otp" | "password";
+type LoginMethod = "otp" | "password" | "qr";
 
 /**
  * Remembers which sign-in method this browser used last. The control-room
@@ -31,9 +33,13 @@ const METHOD_STORAGE_KEY = "wxyc-archive-login-method";
 function readPreferredMethod(): LoginMethod {
   try {
     if (typeof localStorage === "undefined") return "otp";
-    return localStorage.getItem(METHOD_STORAGE_KEY) === "password"
-      ? "password"
-      : "otp";
+    const stored = localStorage.getItem(METHOD_STORAGE_KEY);
+    if (stored === "password") return "password";
+    // A stored "qr" is only honored while the flag is on, so a browser that
+    // opted into QR before it was turned off is not stranded on a method it
+    // can no longer reach.
+    if (stored === "qr" && isQrLoginEnabled()) return "qr";
+    return "otp";
   } catch {
     return "otp";
   }
@@ -260,6 +266,18 @@ export function LoginDialog() {
     </>
   );
 
+  const qrLink = isQrLoginEnabled() ? (
+    <Button
+      type="button"
+      variant="link"
+      className="w-full"
+      onClick={() => switchMethod("qr")}
+      disabled={isSubmitting}
+    >
+      Sign in with a QR code
+    </Button>
+  ) : null;
+
   const identifierField = (
     <div className="space-y-2">
       <Label htmlFor="usernameOrEmail">Username or Email</Label>
@@ -286,7 +304,12 @@ export function LoginDialog() {
           <DialogTitle>DJ Sign In</DialogTitle>
         </DialogHeader>
 
-        {method === "password" ? (
+        {method === "qr" ? (
+          <QrSignIn
+            onSignedIn={finishSignedIn}
+            onUsePassword={() => switchMethod("password")}
+          />
+        ) : method === "password" ? (
           <form onSubmit={handlePasswordSubmit} className="space-y-4">
             {identifierField}
             <div className="space-y-2">
@@ -313,6 +336,7 @@ export function LoginDialog() {
             >
               Email me a code instead
             </Button>
+            {qrLink}
           </form>
         ) : codeSentTo === null ? (
           <form onSubmit={handleSendCode} className="space-y-4">
@@ -333,6 +357,7 @@ export function LoginDialog() {
             >
               Use a password instead
             </Button>
+            {qrLink}
           </form>
         ) : (
           <form onSubmit={handleVerifyCode} className="space-y-4">
