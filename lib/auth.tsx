@@ -184,6 +184,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkSession();
   }, [resolveStationRole]);
 
+  /**
+   * The shared tail of every sign-in path: pull the session the credential
+   * step just established, then gate on the WXYC station role carried in the
+   * JWT claim rather than the admin-plugin `session.user.role`, which is null
+   * for a plain dj. Mirrors the server-side gate in the signed-url route.
+   *
+   * How the credentials were proven — password today, an emailed code or a
+   * scanned QR later — has no bearing on who gets archive access, so the
+   * decision lives in exactly one place.
+   */
+  const completeSignIn = useCallback(async (): Promise<LoginResult> => {
+    const sessionResult = await authClient.getSession();
+    if (!sessionResult.data?.session || !sessionResult.data?.user) {
+      return { success: false, error: "Login failed" };
+    }
+
+    setSession(sessionResult.data.session);
+    setUser(sessionResult.data.user as User);
+
+    const roleResult = await resolveStationRole();
+
+    if (roleResult.status !== "ok") {
+      // Couldn't fetch or decode the token — a transient/system failure, not
+      // an authorization decision. Don't tell a DJ they lack access when we
+      // simply couldn't check.
+      return {
+        success: false,
+        error: "Could not verify your archive access. Please try again.",
+      };
+    }
+
+    if (!isDJRole(roleResult.role)) {
+      return {
+        success: false,
+        error: "Your account does not have archive access",
+      };
+    }
+
+    return { success: true };
+  }, [resolveStationRole]);
+
   const login = useCallback(
     async (usernameOrEmail: string, password: string): Promise<LoginResult> => {
       // Short-circuit before touching the network: this account cannot
@@ -216,39 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
         }
 
-        // Sign in successful, session cookie is set
-        // Now fetch the session to get user data
-        const sessionResult = await authClient.getSession();
-        if (sessionResult.data?.session && sessionResult.data?.user) {
-          setSession(sessionResult.data.session);
-          setUser(sessionResult.data.user as User);
-
-          // Gate on the WXYC station role from the JWT claim, not the
-          // admin-plugin session.user.role (null for a plain dj). See
-          // fetchStationRole above; mirrors the server signed-url gate.
-          const roleResult = await resolveStationRole();
-
-          if (roleResult.status !== "ok") {
-            // We couldn't fetch or decode the token — a transient/system
-            // failure, not an authorization decision. Don't tell a DJ they
-            // lack access when we simply couldn't check.
-            return {
-              success: false,
-              error: "Could not verify your archive access. Please try again.",
-            };
-          }
-
-          if (!isDJRole(roleResult.role)) {
-            return {
-              success: false,
-              error: "Your account does not have archive access",
-            };
-          }
-
-          return { success: true };
-        }
-
-        return { success: false, error: "Login failed" };
+        return completeSignIn();
       } catch (error) {
         console.error("Login error:", error);
         return {
@@ -257,7 +266,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
     },
-    [resolveStationRole]
+    [completeSignIn]
   );
 
   const logout = useCallback(async () => {
