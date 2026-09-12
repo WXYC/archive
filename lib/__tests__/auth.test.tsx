@@ -39,8 +39,15 @@ function fakeJwt(payload: Record<string, unknown>): string {
   return `${b64url(header)}.${b64url(payload)}.sig`;
 }
 
-// Test component that uses the auth hook
-function TestComponent() {
+// Test component that uses the auth hook. The credential props default to a
+// normal username so existing tests render it bare.
+function TestComponent({
+  identifier = "testuser",
+  password = "password",
+}: {
+  identifier?: string;
+  password?: string;
+} = {}) {
   const {
     isLoading,
     isAuthenticated,
@@ -61,10 +68,14 @@ function TestComponent() {
       <div data-testid="user-role">{userRole ?? "no-role"}</div>
       <button
         onClick={async () => {
-          const result = await login("testuser", "password");
+          const result = await login(identifier, password);
           document.body.setAttribute(
             "data-login-result",
             result.success ? "success" : result.error
+          );
+          document.body.setAttribute(
+            "data-login-kind",
+            result.success ? "success" : (result.kind ?? "unspecified")
           );
         }}
       >
@@ -87,6 +98,7 @@ describe("AuthProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     document.body.removeAttribute("data-login-result");
+    document.body.removeAttribute("data-login-kind");
     document.body.removeAttribute("data-token");
   });
 
@@ -465,6 +477,100 @@ describe("AuthProvider", () => {
           "Could not verify your archive access. Please try again."
         );
       });
+    });
+  });
+
+  // The shared archive account was retired 2026-09-12. Anyone still typing it
+  // would otherwise get better-auth's generic "invalid username or password",
+  // which does not explain what changed or what to do instead.
+  describe("retired shared credential", () => {
+    it.each([
+      ["the exact username", "wxycarch"],
+      ["an uppercased username", "WXYCARCH"],
+      ["a mixed-case username", "WxycArch"],
+      ["surrounding whitespace", "  wxycarch  "],
+    ])(
+      "reports %s as the retired shared account without contacting the auth server",
+      async (_label, identifier) => {
+        const user = userEvent.setup();
+        mockGetSession.mockResolvedValue({ data: null });
+
+        render(
+          <AuthProvider>
+            <TestComponent identifier={identifier} />
+          </AuthProvider>
+        );
+
+        await waitFor(() => {
+          expect(screen.getByTestId("loading").textContent).toBe("ready");
+        });
+
+        await user.click(screen.getByText("Login"));
+
+        await waitFor(() => {
+          expect(document.body.getAttribute("data-login-kind")).toBe(
+            "retired-shared-credential"
+          );
+        });
+
+        // Short-circuited locally: the retired account cannot authenticate, so
+        // there is nothing to ask the server and no attempt to rate-limit.
+        expect(mockSignInUsername).not.toHaveBeenCalled();
+        expect(mockSignInEmail).not.toHaveBeenCalled();
+      }
+    );
+
+    it("names the DJ sign-in destination so the user knows where to go", async () => {
+      const user = userEvent.setup();
+      mockGetSession.mockResolvedValue({ data: null });
+
+      render(
+        <AuthProvider>
+          <TestComponent identifier="wxycarch" />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Login"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-login-result")).toContain(
+          "dj.wxyc.org"
+        );
+      });
+    });
+
+    it("leaves an ordinary username untouched", async () => {
+      const user = userEvent.setup();
+      mockGetSession.mockResolvedValue({ data: null });
+      mockSignInUsername.mockResolvedValue({
+        error: { message: "Invalid username or password" },
+      });
+
+      render(
+        <AuthProvider>
+          <TestComponent identifier="wxycarchivist" />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Login"));
+
+      await waitFor(() => {
+        expect(mockSignInUsername).toHaveBeenCalledWith({
+          username: "wxycarchivist",
+          password: "password",
+        });
+      });
+      expect(document.body.getAttribute("data-login-kind")).not.toBe(
+        "retired-shared-credential"
+      );
     });
   });
 
