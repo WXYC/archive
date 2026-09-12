@@ -129,6 +129,49 @@ describe("jwt-utils", () => {
     });
   });
 
+  // The claim is arbitrary until checked. Consumers rank it with
+  // roleToAuthorization, which calls .toLowerCase(), so anything that is not a
+  // recognized role string has to become null here rather than flowing onward
+  // and throwing at the call site.
+  describe("role claim narrowing", () => {
+    function verifyWithRole(role: unknown) {
+      vi.mocked(jose.jwtVerify).mockResolvedValue({
+        payload: { sub: "user-123", role },
+        protectedHeader: { alg: "EdDSA" },
+        key: new Uint8Array(),
+      } as unknown as jose.JWTVerifyResult & jose.ResolvedKey);
+      return verifyToken("token");
+    }
+
+    it.each([
+      ["a number", 42],
+      ["an array", ["dj"]],
+      ["an object", { role: "dj" }],
+      ["a boolean", true],
+      ["an unrecognized string", "wizard"],
+      ["a prototype key", "constructor"],
+    ])("resolves %s to null", async (_label, role) => {
+      const result = await verifyWithRole(role);
+      expect(result).toMatchObject({ authenticated: true, role: null });
+    });
+
+    it("canonicalizes an accepted alias to its station role", async () => {
+      const result = await verifyWithRole("admin");
+      expect(result).toMatchObject({
+        authenticated: true,
+        role: "stationManager",
+      });
+    });
+
+    it("passes a canonical role through unchanged", async () => {
+      const result = await verifyWithRole("musicDirector");
+      expect(result).toMatchObject({
+        authenticated: true,
+        role: "musicDirector",
+      });
+    });
+  });
+
   describe("verifyToken", () => {
     it("should return authenticated true with payload for valid token", async () => {
       const mockPayload = {
