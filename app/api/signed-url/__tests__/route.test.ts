@@ -342,15 +342,18 @@ describe("POST /api/signed-url", () => {
       );
     });
 
-    // Header-parsing coverage, retained from the deleted bypass suite and
-    // retargeted at an arbitrary token: only a well-formed "Bearer <token>"
-    // reaches verification, and none of these grant anything either way.
+    // Retained from the deleted bypass suite. The route no longer inspects the
+    // header itself (the `authHeader.startsWith("Bearer ")` slicing went away
+    // with the bypass), so what these pin is the delegation: an odd-looking
+    // header reaches verifyAuthHeader verbatim rather than being pre-filtered,
+    // and none of them grant DJ range. The parsing rules themselves are covered
+    // in lib/__tests__/jwt-utils.test.ts.
     it.each([
       ["lowercase prefix", "bearer some-other-token"],
       ["no space after Bearer", "Bearersome-other-token"],
       ["different scheme", "Token some-other-token"],
     ])(
-      "does not grant DJ range for a malformed header: %s",
+      "forwards a malformed header verbatim and grants no DJ range: %s",
       async (_label, malformedHeader) => {
         mockVerifyAuthHeader.mockResolvedValue({
           authenticated: false,
@@ -363,6 +366,7 @@ describe("POST /api/signed-url", () => {
         );
 
         expect(response.status).toBe(403);
+        expect(mockVerifyAuthHeader).toHaveBeenCalledWith(malformedHeader);
       }
     );
   });
