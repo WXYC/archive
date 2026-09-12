@@ -10,35 +10,30 @@ const mockSignInEmail = vi.fn();
 const mockSignOut = vi.fn();
 const mockGetJWTToken = vi.fn();
 
-vi.mock("@wxyc/shared/auth-client", () => ({
-  authClient: {
-    getSession: () => mockGetSession(),
-    signIn: {
-      username: (params: { username: string; password: string }) =>
-        mockSignInUsername(params),
-      email: (params: { email: string; password: string }) =>
-        mockSignInEmail(params),
+// Only the network-facing surface is faked. Authorization, roleToAuthorization
+// and canonicalizeRole are pure, dependency-free functions, and the role
+// semantics under test ARE their semantics — a hand-written stand-in drifts
+// from them silently (the previous one invented an Authorization.ADMIN member
+// that does not exist; the real enum ranks "admin" as stationManager).
+vi.mock("@wxyc/shared/auth-client", async () => {
+  const actual = await vi.importActual<
+    typeof import("@wxyc/shared/auth-client")
+  >("@wxyc/shared/auth-client");
+  return {
+    ...actual,
+    authClient: {
+      getSession: () => mockGetSession(),
+      signIn: {
+        username: (params: { username: string; password: string }) =>
+          mockSignInUsername(params),
+        email: (params: { email: string; password: string }) =>
+          mockSignInEmail(params),
+      },
+      signOut: () => mockSignOut(),
     },
-    signOut: () => mockSignOut(),
-  },
-  getJWTToken: () => mockGetJWTToken(),
-  Authorization: { NO: 0, DJ: 1, MD: 2, SM: 3, ADMIN: 4 },
-  roleToAuthorization: (role: string | null | undefined) => {
-    if (!role) return 0;
-    switch (role) {
-      case "admin":
-        return 4;
-      case "stationManager":
-        return 3;
-      case "musicDirector":
-        return 2;
-      case "dj":
-        return 1;
-      default:
-        return 0;
-    }
-  },
-}));
+    getJWTToken: () => mockGetJWTToken(),
+  };
+});
 
 const mockResolveEmail = vi.fn();
 const mockSendVerificationOtp = vi.fn();
@@ -339,13 +334,19 @@ describe("AuthProvider", () => {
       });
     });
 
+    // The rank comes from the JWT station-role claim. session.user.role is the
+    // better-auth admin-plugin field and is null for a plain dj, so a test that
+    // set it there would pass while the real gate reported NO.
     it("should expose authorization level for dj role", async () => {
       mockGetSession.mockResolvedValue({
         data: {
           session: { id: "session-1" },
-          user: { id: "user-1", name: "Test DJ", role: "dj" },
+          user: { id: "user-1", name: "Test DJ", role: null },
         },
       });
+      mockGetJWTToken.mockResolvedValue(
+        fakeJwt({ role: "dj", exp: Math.floor(Date.now() / 1000) + 3600 })
+      );
 
       render(
         <AuthProvider>
@@ -354,7 +355,9 @@ describe("AuthProvider", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId("authorization").textContent).toBe("1");
+        expect(screen.getByTestId("authorization").textContent).toBe(
+          String(Authorization.DJ)
+        );
       });
     });
 
@@ -373,13 +376,21 @@ describe("AuthProvider", () => {
       });
     });
 
-    it("should authenticate admin role users", async () => {
+    // "admin" and "owner" are accepted aliases that canonicalize to
+    // stationManager, so they rank at SM (3) and clear the DJ bar. isDJRole
+    // matched the three canonical names exactly and refused them — this is the
+    // case the ranked comparison exists to handle. There is no Authorization
+    // .ADMIN; the enum is NO/DJ/MD/SM.
+    it("should authenticate an admin-aliased role at stationManager rank", async () => {
       mockGetSession.mockResolvedValue({
         data: {
           session: { id: "session-1" },
           user: { id: "admin-1", name: "Admin", role: "admin" },
         },
       });
+      mockGetJWTToken.mockResolvedValue(
+        fakeJwt({ role: "admin", exp: Math.floor(Date.now() / 1000) + 3600 })
+      );
 
       render(
         <AuthProvider>
@@ -391,8 +402,13 @@ describe("AuthProvider", () => {
         expect(screen.getByTestId("authenticated").textContent).toBe(
           "authenticated"
         );
-        expect(screen.getByTestId("authorization").textContent).toBe("4");
+        expect(screen.getByTestId("authorization").textContent).toBe(
+          String(Authorization.SM)
+        );
       });
+      expect(screen.getByTestId("user-role").textContent).toBe(
+        "stationManager"
+      );
     });
   });
 

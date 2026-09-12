@@ -12,6 +12,7 @@ import {
   authClient,
   getJWTToken,
   Authorization,
+  canonicalizeRole,
   roleToAuthorization,
 } from "@wxyc/shared/auth-client";
 import type { Session, WXYCRole } from "@wxyc/shared/auth-client";
@@ -123,7 +124,7 @@ const JWT_CLOCK_SKEW_MS = 60_000;
 type StationRoleResult =
   | {
       status: "ok";
-      role: string | null;
+      role: WXYCRole | null;
       token: string;
       expiresAt: number | null;
     }
@@ -159,7 +160,15 @@ async function fetchStationRole(): Promise<StationRoleResult> {
       // as authenticated off a stale token.
       return { status: "unavailable" };
     }
-    const role = typeof payload.role === "string" ? payload.role : null;
+    // Canonicalized at the boundary: the claim is whatever the token carried,
+    // and canonicalizeRole is fail-closed, so an unrecognized value becomes
+    // null rather than an unranked string flowing through the app. The gate is
+    // unaffected either way — roleToAuthorization ranks both as NO — but it
+    // makes the exposed userRole type honest.
+    const role =
+      (typeof payload.role === "string"
+        ? canonicalizeRole(payload.role)
+        : undefined) ?? null;
     return { status: "ok", role, token, expiresAt };
   } catch (error) {
     console.error("Failed to decode JWT for station role:", error);
@@ -171,7 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [stationRole, setStationRole] = useState<string | null>(null);
+  const [stationRole, setStationRole] = useState<WXYCRole | null>(null);
 
   // Cache the JWT fetched while resolving the station role so getToken() can
   // reuse it instead of issuing another /auth/token round-trip on every
