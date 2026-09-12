@@ -71,6 +71,17 @@ describe("LoginDialog", () => {
     mockIsAuthenticated = false;
     mockIsLoading = false;
     mockUser = null;
+    // Every test starts from empty, isolated storage. Without this the suite
+    // silently depends on whether the environment happens to provide a
+    // localStorage at all: Node's is inert without --localstorage-file, so
+    // savePreferredMethod no-ops and every test opens on the emailed-code
+    // form, while in CI it is real and one test switching to the password
+    // form leaks "password" into every test that follows.
+    installLocalStorage();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   describe("loading state", () => {
@@ -572,12 +583,7 @@ describe("LoginDialog", () => {
   });
 
   describe("method preference", () => {
-    afterEach(() => {
-      vi.unstubAllGlobals();
-    });
-
     it("reopens on the password form once the user has chosen it", async () => {
-      installLocalStorage();
       const user = userEvent.setup();
 
       render(<LoginDialog />);
@@ -593,7 +599,6 @@ describe("LoginDialog", () => {
     });
 
     it("falls back to the emailed code when no preference is stored", async () => {
-      installLocalStorage();
       const user = userEvent.setup();
 
       render(<LoginDialog />);
@@ -606,6 +611,10 @@ describe("LoginDialog", () => {
     });
 
     it("still opens when localStorage is unavailable", async () => {
+      // Stated outright rather than inherited from the environment — relying
+      // on ambient absence is exactly what made this suite pass locally and
+      // fail in CI.
+      vi.stubGlobal("localStorage", undefined);
       const user = userEvent.setup();
 
       render(<LoginDialog />);
