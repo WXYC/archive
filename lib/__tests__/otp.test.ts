@@ -30,19 +30,28 @@ function lastCall(): { url: string; body: unknown; method: string } {
 
 describe("resolveEmail", () => {
   it("passes an address straight through without a network call", async () => {
-    await expect(resolveEmail("dj@wxyc.org")).resolves.toBe("dj@wxyc.org");
+    await expect(resolveEmail("dj@wxyc.org")).resolves.toEqual({
+      status: "ok",
+      email: "dj@wxyc.org",
+    });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("trims before deciding, so a padded address is still recognised", async () => {
-    await expect(resolveEmail("  dj@wxyc.org  ")).resolves.toBe("dj@wxyc.org");
+    await expect(resolveEmail("  dj@wxyc.org  ")).resolves.toEqual({
+      status: "ok",
+      email: "dj@wxyc.org",
+    });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("resolves a username through the lookup endpoint", async () => {
     mockFetch.mockResolvedValue(jsonResponse({ email: "dj@wxyc.org" }));
 
-    await expect(resolveEmail("djhandle")).resolves.toBe("dj@wxyc.org");
+    await expect(resolveEmail("djhandle")).resolves.toEqual({
+      status: "ok",
+      email: "dj@wxyc.org",
+    });
 
     const call = lastCall();
     expect(call.url).toBe("/auth/wxyc/lookup-email");
@@ -50,19 +59,58 @@ describe("resolveEmail", () => {
     expect(call.body).toEqual({ identifier: "djhandle" });
   });
 
-  it("returns null when no account matches", async () => {
+  // The endpoint answers 200 with a null email for an identifier it does not
+  // know. That is an answer about the account, and it is the only outcome that
+  // entitles the caller to say no account matches.
+  it("reports not-found when the lookup answers with no address", async () => {
     mockFetch.mockResolvedValue(jsonResponse({ email: null }));
-    await expect(resolveEmail("nobody")).resolves.toBeNull();
+    await expect(resolveEmail("nobody")).resolves.toEqual({
+      status: "not-found",
+    });
   });
 
-  it("returns null rather than throwing when the lookup fails", async () => {
-    mockFetch.mockResolvedValue(jsonResponse({ error: "boom" }, 500));
-    await expect(resolveEmail("djhandle")).resolves.toBeNull();
+  // A username sign-in spends three of the limiter's ten tokens per attempt —
+  // lookup, send, verify — because express matches the configured paths by
+  // prefix, so /auth/sign-in/email-otp counts against /auth/sign-in. Four
+  // attempts in fifteen minutes is enough, which a DJ mistyping a username
+  // reaches easily. The limiter answers in `error`, not better-auth's
+  // `message`, and that wording is the part that says to wait.
+  it("reports a throttle as unavailable, carrying the limiter's wording", async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({ error: "Too many requests, please try again later." }, 429)
+    );
+
+    await expect(resolveEmail("djhandle")).resolves.toEqual({
+      status: "unavailable",
+      error: "Too many requests, please try again later.",
+    });
   });
 
-  it("returns null rather than throwing when the network is down", async () => {
+  it("reports a server failure as unavailable rather than a missing account", async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({ error: "Internal server error" }, 500)
+    );
+    await expect(resolveEmail("djhandle")).resolves.toEqual({
+      status: "unavailable",
+      error: "Internal server error",
+    });
+  });
+
+  it("reports a dead network as unavailable rather than throwing", async () => {
     mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
-    await expect(resolveEmail("djhandle")).resolves.toBeNull();
+    await expect(resolveEmail("djhandle")).resolves.toEqual({
+      status: "unavailable",
+    });
+  });
+
+  // Nothing to quote, so nothing is quoted: the caller supplies the wording.
+  it("reports unavailable without wording when the failure body says nothing", async () => {
+    mockFetch.mockResolvedValue(
+      new Response("<html>502</html>", { status: 502 })
+    );
+    await expect(resolveEmail("djhandle")).resolves.toEqual({
+      status: "unavailable",
+    });
   });
 });
 

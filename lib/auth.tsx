@@ -341,24 +341,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * Accepts a username or an address, matching the password form, and resolves
    * the former through the public lookup endpoint before asking better-auth to
    * send anything.
+   *
+   * A lookup that could not be made is reported as such rather than as a
+   * missing account. The lookup sits behind the same brute-force limiter as the
+   * rest of the auth mutations, and a username sign-in spends three of its ten
+   * tokens per attempt, so a DJ mistyping a username reaches the throttle in
+   * four tries — at which point "no account matches" is both untrue and the
+   * advice that leads them to keep retrying, which is what extends the block.
+   * The limiter's own wording is the part that tells them to wait, so it is
+   * what gets shown.
    */
   const sendLoginCode = useCallback(
     async (identifier: string): Promise<SendCodeResult> => {
       const retired = retiredSharedCredential(identifier);
       if (retired) return retired;
 
-      const email = await resolveEmail(identifier);
-      if (!email) {
+      const lookup = await resolveEmail(identifier);
+      if (lookup.status === "not-found") {
         return {
           success: false,
           error: "No account matches that username or email.",
         };
       }
+      if (lookup.status === "unavailable") {
+        return {
+          success: false,
+          error:
+            lookup.error ??
+            "Could not check that account right now. Please try again in a few minutes.",
+        };
+      }
 
-      const sent = await sendVerificationOtp(email);
+      const sent = await sendVerificationOtp(lookup.email);
       if (!sent.ok) return { success: false, error: sent.error };
 
-      return { success: true, email };
+      return { success: true, email: lookup.email };
     },
     []
   );

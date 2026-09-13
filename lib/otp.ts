@@ -21,6 +21,19 @@ const AUTH_BASE = "/auth";
 export type OtpResult = { ok: true } | { ok: false; error: string };
 
 /**
+ * Outcome of turning a typed identifier into an address.
+ *
+ * Three cases rather than two because `not-found` is an answer about the
+ * account and `unavailable` is the absence of an answer, and the caller owes
+ * the user different words for each. `error` carries whatever the server said,
+ * when it said anything; the caller supplies the wording when it did not.
+ */
+export type EmailLookupResult =
+  | { status: "ok"; email: string }
+  | { status: "not-found" }
+  | { status: "unavailable"; error?: string };
+
+/**
  * better-auth error codes worth rewording. Its own copy for these is terse
  * ("Invalid OTP"), and each of them has a different next action for the user.
  * Anything not listed falls through to the server's message, so a new upstream
@@ -44,7 +57,7 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 /**
- * The most specific thing the server said, or `fallback` if it said nothing.
+ * The most specific thing the server said, or undefined if it said nothing.
  *
  * better-auth reports in `message`, but two other things answer on these same
  * paths and report in `error`: the shared brute-force limiter in front of the
@@ -53,12 +66,16 @@ async function readJson(response: Response): Promise<unknown> {
  * later." into a generic retry prompt — the one that invites the retry that
  * deepens the block.
  */
-function messageFrom(body: unknown, fallback: string): string {
+function serverMessage(body: unknown): string | undefined {
   const parsed = body as AuthErrorBody | null;
-  const said = [parsed?.message, parsed?.error].find(
+  return [parsed?.message, parsed?.error].find(
     (value): value is string => typeof value === "string" && value.length > 0
   );
-  return said ?? fallback;
+}
+
+/** The same, falling back to copy of our own when the server said nothing. */
+function messageFrom(body: unknown, fallback: string): string {
+  return serverMessage(body) ?? fallback;
 }
 
 async function postJson(path: string, payload: unknown): Promise<Response> {
@@ -76,25 +93,37 @@ async function postJson(path: string, payload: unknown): Promise<Response> {
  * Turn whatever the user typed into the address better-auth needs.
  *
  * An input containing "@" is taken as an address and returned as-is; anything
- * else is resolved through the public lookup endpoint. Never throws: every
- * failure — no match, a 5xx, a dead network — collapses to `null`, because the
- * caller's message to the user is the same in all of those cases and a thrown
- * error here would be indistinguishable from a real one later in the flow.
+ * else is resolved through the public lookup endpoint, which answers 200 with
+ * a null email for an identifier it does not know.
+ *
+ * Never throws — a thrown error here would be indistinguishable from a real one
+ * later in the flow — but it does not flatten either. Only a 200 carrying no
+ * address means no such account; a 429, a 5xx or a dead network means we could
+ * not ask, and saying "no account matches" to a DJ the limiter has throttled is
+ * both false and the advice most likely to make it worse.
  */
-export async function resolveEmail(identifier: string): Promise<string | null> {
+export async function resolveEmail(
+  identifier: string
+): Promise<EmailLookupResult> {
   const trimmed = identifier.trim();
-  if (trimmed.includes("@")) return trimmed;
+  if (trimmed.includes("@")) return { status: "ok", email: trimmed };
 
   try {
     const response = await postJson("/wxyc/lookup-email", {
       identifier: trimmed,
     });
-    if (!response.ok) return null;
+    const body = await readJson(response);
 
-    const body = (await readJson(response)) as { email?: unknown } | null;
-    return typeof body?.email === "string" ? body.email : null;
+    if (!response.ok) {
+      return { status: "unavailable", error: serverMessage(body) };
+    }
+
+    const email = (body as { email?: unknown } | null)?.email;
+    return typeof email === "string"
+      ? { status: "ok", email }
+      : { status: "not-found" };
   } catch {
-    return null;
+    return { status: "unavailable" };
   }
 }
 

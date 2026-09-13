@@ -730,7 +730,10 @@ describe("AuthProvider", () => {
     it("resolves the identifier and requests a code for the resolved address", async () => {
       const user = userEvent.setup();
       mockGetSession.mockResolvedValue({ data: null });
-      mockResolveEmail.mockResolvedValue("dj@wxyc.org");
+      mockResolveEmail.mockResolvedValue({
+        status: "ok",
+        email: "dj@wxyc.org",
+      });
       mockSendVerificationOtp.mockResolvedValue({ ok: true });
 
       render(
@@ -756,7 +759,7 @@ describe("AuthProvider", () => {
     it("does not send anything when no account matches", async () => {
       const user = userEvent.setup();
       mockGetSession.mockResolvedValue({ data: null });
-      mockResolveEmail.mockResolvedValue(null);
+      mockResolveEmail.mockResolvedValue({ status: "not-found" });
 
       render(
         <AuthProvider>
@@ -800,6 +803,68 @@ describe("AuthProvider", () => {
       // Emailing a code to whatever that account resolves to would be worse
       // than useless, so the lookup never happens.
       expect(mockResolveEmail).not.toHaveBeenCalled();
+      expect(mockSendVerificationOtp).not.toHaveBeenCalled();
+    });
+
+    // A throttled DJ used to be told their account did not exist. The lookup
+    // is rate-limited alongside the rest of the auth mutations and a username
+    // sign-in spends three of the ten tokens per attempt, so this is what a
+    // DJ mistyping their username hits on the fourth try. The limiter's own
+    // wording is the part that says to wait, and retrying is what deepens the
+    // block.
+    it("surfaces a throttled lookup as a wait rather than a missing account", async () => {
+      const user = userEvent.setup();
+      mockGetSession.mockResolvedValue({ data: null });
+      mockResolveEmail.mockResolvedValue({
+        status: "unavailable",
+        error: "Too many requests, please try again later.",
+      });
+
+      render(
+        <AuthProvider>
+          <TestComponent identifier="djhandle" />
+        </AuthProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Send Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-send-code")).toBe(
+          "Too many requests, please try again later."
+        );
+      });
+      expect(mockSendVerificationOtp).not.toHaveBeenCalled();
+    });
+
+    // A 5xx or a dead network is not an answer about the account either, and
+    // the server has no wording to quote in that case.
+    it("does not claim the account is missing when the lookup could not be made", async () => {
+      const user = userEvent.setup();
+      mockGetSession.mockResolvedValue({ data: null });
+      mockResolveEmail.mockResolvedValue({ status: "unavailable" });
+
+      render(
+        <AuthProvider>
+          <TestComponent identifier="djhandle" />
+        </AuthProvider>
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("loading").textContent).toBe("ready");
+      });
+
+      await user.click(screen.getByText("Send Code"));
+
+      await waitFor(() => {
+        expect(document.body.getAttribute("data-send-code")).toBe(
+          "Could not check that account right now. Please try again in a few minutes."
+        );
+      });
+      expect(document.body.getAttribute("data-send-code")).not.toMatch(
+        /no account/i
+      );
       expect(mockSendVerificationOtp).not.toHaveBeenCalled();
     });
   });
