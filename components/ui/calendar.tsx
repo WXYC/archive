@@ -6,10 +6,70 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "lucide-react";
-import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker";
+import {
+  DayButton,
+  DayPicker,
+  getDefaultClassNames,
+  type CustomComponents,
+} from "react-day-picker";
 
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
+
+/**
+ * These are declared at module scope, not inside `Calendar`, and that placement
+ * is load-bearing rather than stylistic.
+ *
+ * A component defined in a render body is a new function — a new component
+ * *type* — on every render. React cannot reconcile a changed type, so it
+ * unmounts the old subtree and mounts a fresh one. With `Root` that means the
+ * entire calendar DOM is destroyed and rebuilt on every re-render of the host
+ * page, which is invisible while the page is idle and ruinous once it is not:
+ * the archive page re-renders on every `timeupdate` during playback, so the
+ * month-navigation buttons were being detached several times a second. A click
+ * whose mousedown and mouseup land on different nodes produces no click event
+ * at all, so the calendar simply ignored them.
+ *
+ * `DayButton` was already hoisted; these three were not.
+ */
+const CalendarRoot: CustomComponents["Root"] = ({
+  className,
+  rootRef,
+  ...props
+}) => {
+  return (
+    <div data-slot="calendar" ref={rootRef} className={cn(className)} {...props} />
+  );
+};
+
+const CalendarChevron: CustomComponents["Chevron"] = ({
+  className,
+  orientation,
+  ...props
+}) => {
+  if (orientation === "left") {
+    return <ChevronLeftIcon className={cn("size-4", className)} {...props} />;
+  }
+
+  if (orientation === "right") {
+    return <ChevronRightIcon className={cn("size-4", className)} {...props} />;
+  }
+
+  return <ChevronDownIcon className={cn("size-4", className)} {...props} />;
+};
+
+const CalendarWeekNumber: CustomComponents["WeekNumber"] = ({
+  children,
+  ...props
+}) => {
+  return (
+    <td {...props}>
+      <div className="flex w-[var(--cell-size)] h-[var(--cell-size)] items-center justify-center text-center">
+        {children}
+      </div>
+    </td>
+  );
+};
 
 function Calendar({
   className,
@@ -121,46 +181,10 @@ function Calendar({
         ...classNames,
       }}
       components={{
-        Root: ({ className, rootRef, ...props }) => {
-          return (
-            <div
-              data-slot="calendar"
-              ref={rootRef}
-              className={cn(className)}
-              {...props}
-            />
-          );
-        },
-        Chevron: ({ className, orientation, ...props }) => {
-          if (orientation === "left") {
-            return (
-              <ChevronLeftIcon className={cn("size-4", className)} {...props} />
-            );
-          }
-
-          if (orientation === "right") {
-            return (
-              <ChevronRightIcon
-                className={cn("size-4", className)}
-                {...props}
-              />
-            );
-          }
-
-          return (
-            <ChevronDownIcon className={cn("size-4", className)} {...props} />
-          );
-        },
+        Root: CalendarRoot,
+        Chevron: CalendarChevron,
         DayButton: CalendarDayButton,
-        WeekNumber: ({ children, ...props }) => {
-          return (
-            <td {...props}>
-              <div className="flex w-[var(--cell-size)] h-[var(--cell-size)] items-center justify-center text-center">
-                {children}
-              </div>
-            </td>
-          );
-        },
+        WeekNumber: CalendarWeekNumber,
         ...components,
       }}
       {...props}
