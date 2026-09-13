@@ -229,9 +229,9 @@ export function LoginDialog() {
 
   // Resend against the address the first code reached, not the raw identifier.
   // resolveEmail returns anything containing "@" as-is, so this skips the
-  // username lookup; re-running it would let one transient 5xx answer "no
-  // account matches that username or email" on the very screen that just
-  // named the mailbox.
+  // username lookup entirely: a resend neither spends a second token of the
+  // shared rate limit nor can fail on a lookup blip, on the very screen that
+  // just named the mailbox.
   const handleResend = () =>
     requestCode(codeSentTo ?? usernameOrEmail, (email) =>
       setNotice(`A new code is on its way to ${email}.`)
