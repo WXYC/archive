@@ -16,8 +16,13 @@ import { test, expect } from "@playwright/test";
 /** Point the media element at a silent track so `timeupdate` fires locally. */
 async function startSilentPlayback(page: import("@playwright/test").Page) {
   const result = await page.evaluate(async () => {
-    const audio = document.querySelector("audio");
-    if (!audio) return { ok: false, reason: "no audio element" };
+    // There are two audio elements: the player and a hidden preload buffer
+    // (`preload="auto"`) used for gapless hour transitions. Only the player
+    // carries onTimeUpdate, and only it re-renders the page — so select it by
+    // that distinguishing attribute rather than by DOM order, which would
+    // silently drive the wrong element if the two were ever reordered.
+    const audio = document.querySelector<HTMLAudioElement>("audio:not([preload])");
+    if (!audio) return { ok: false, reason: "no player audio element" };
 
     const sampleRate = 8000;
     const samples = sampleRate * 2;
@@ -63,6 +68,21 @@ async function startSilentPlayback(page: import("@playwright/test").Page) {
   ).toBe(true);
 }
 
+/**
+ * Keep the page from resolving a real audio URL.
+ *
+ * The player's `src` is React-controlled (`src={audioUrl || undefined}`), so a
+ * successful /api/signed-url fetch replaces the silent blob this test installs,
+ * which calls load(), pauses playback and stops the re-render loop. On a machine
+ * with AWS credentials configured — which is the documented dev setup — that
+ * would make the churn assertion pass vacuously even against the broken
+ * component. Failing the request keeps `audioUrl` null, so React never touches
+ * the attribute and the blob stays put.
+ */
+async function blockSignedUrls(page: import("@playwright/test").Page) {
+  await page.route("**/api/signed-url", (route) => route.abort());
+}
+
 async function openDatePicker(page: import("@playwright/test").Page) {
   // The trigger is labelled with the selected date, e.g. "September 12, 2026".
   await page
@@ -77,6 +97,7 @@ test.describe("calendar stability during playback", () => {
   test("the calendar is not rebuilt while the page re-renders", async ({
     page,
   }) => {
+    await blockSignedUrls(page);
     await page.goto("/");
     await startSilentPlayback(page);
     await openDatePicker(page);
@@ -105,6 +126,7 @@ test.describe("calendar stability during playback", () => {
   });
 
   test("a human-paced click on previous-month registers", async ({ page }) => {
+    await blockSignedUrls(page);
     await page.goto("/");
     await startSilentPlayback(page);
     await openDatePicker(page);
@@ -132,10 +154,11 @@ test.describe("calendar stability during playback", () => {
     await page.waitForTimeout(1000);
     await page.mouse.up();
 
-    const after = (await caption.textContent())?.trim() ?? "";
-    expect(
-      after,
+    // Web-first so a deferred React update does not flake this red. It still
+    // fails against the broken component, where the month never changes at all.
+    await expect(
+      caption,
       "the click was swallowed: the button was replaced between mousedown and mouseup"
-    ).not.toBe(before);
+    ).not.toHaveText(before);
   });
 });
